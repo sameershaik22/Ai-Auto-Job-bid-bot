@@ -5,9 +5,8 @@
   --font-sans: 'Inter', sans-serif;
 }
 
-/* ── Design tokens ─────────────────────────────────────────────── */
 :root {
-  /* Sidebar — dark navy */
+  
   --sidebar-bg:        #1a1f36;
   --sidebar-hover:     rgba(255,255,255,0.06);
   --sidebar-active:    #4f46e5;
@@ -15,19 +14,16 @@
   --sidebar-text:      rgba(255,255,255,0.65);
   --sidebar-text-muted:rgba(255,255,255,0.35);
 
-  /* Main content — light */
   --bg-app:       #f5f7fb;
   --bg-card:      #ffffff;
   --bg-hover:     #f0f4ff;
   --border:       #e8ecf4;
   --border-soft:  #f0f3fa;
 
-  /* Text */
   --text-primary:   #1e293b;
   --text-secondary: #475569;
   --text-muted:     #94a3b8;
 
-  /* Accent palette */
   --accent:         #4f46e5;
   --accent-light:   rgba(79,70,229,0.08);
   --accent-border:  rgba(79,70,229,0.20);
@@ -48,31 +44,26 @@ body {
   color: var(--text-primary);
 }
 
-/* ── Scrollbar ────────────────────────────────────────────────── */
 ::-webkit-scrollbar        { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track  { background: transparent; }
 ::-webkit-scrollbar-thumb  { background: #cbd5e1; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-/* ── Sidebar scrollbar (dark) ────────────────────────────────── */
 .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
 
-/* ── Card utility ────────────────────────────────────────────── */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
 }
 
-/* ── Status badge helpers ─────────────────────────────────────── */
 .badge-success  { background: var(--success-light);  color: #15803d; }
 .badge-pending  { background: var(--warning-light);  color: #b45309; }
 .badge-failed   { background: var(--danger-light);   color: #b91c1c; }
 .badge-running  { background: var(--info-light);     color: #1d4ed8; }
 .badge-review   { background: #ede9fe;               color: #6d28d9; }
 
-/* ── Animations ──────────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }

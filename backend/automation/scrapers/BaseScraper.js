@@ -1,4 +1,3 @@
-
 export class BaseScraper {
   
   canHandle(url) {
