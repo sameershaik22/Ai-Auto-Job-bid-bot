@@ -6,18 +6,18 @@ Tired of manually filling out hundreds of applications and tailoring your resume
 
 ---
 
-## ✨ Features
+## Features
 
-- **🛡️ Secure Authentication**: Full JWT-based login/register flow.
-- **📄 Resume Vault**: Upload your PDF resumes. The system uses AI to parse out your skills, experience, and education into a structured format.
-- **💼 Job Board Integration**: Paste job URLs or descriptions. The system scores your resume against the job requirements using an AI matching algorithm.
-- **✨ AI Resume Tailoring**: Automatically rewrite and tailor your resume and cover letter specifically for the job you are applying to.
-- **🤖 Headless Automation**: Uses Playwright to spin up a browser in stealth mode, fill out forms, upload your tailored resume, and submit the application for you.
-- **📊 Real-time Dashboard**: Track live automation status, view audit logs, and monitor your application success rates with a sleek, dark-themed UI.
+- ** Secure Authentication**: Full JWT-based login/register flow.
+- ** Resume Vault**: Upload your PDF resumes. The system uses AI to parse out your skills, experience, and education into a structured format.
+- ** Job Board Integration**: Paste job URLs or descriptions. The system scores your resume against the job requirements using an AI matching algorithm.
+- ** AI Resume Tailoring**: Automatically rewrite and tailor your resume and cover letter specifically for the job you are applying to.
+- ** Headless Automation**: Uses Playwright to spin up a browser in stealth mode, fill out forms, upload your tailored resume, and submit the application for you.
+- ** Real-time Dashboard**: Track live automation status, view audit logs, and monitor your application success rates with a sleek, dark-themed UI.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
 - **Framework**: React 18 with Vite
@@ -33,7 +33,7 @@ Tired of manually filling out hundreds of applications and tailoring your resume
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 Follow these instructions to get the platform running on your local machine.
 
@@ -98,7 +98,7 @@ npm run dev
 
 ---
 
-## 💡 How to Use
+##  How to Use
 
 1. **Create an Account**: Open `http://localhost:5173` and register a new account.
 2. **Add a Resume**: Go to the **Resumes** tab and ingest your resume. The AI will extract your skills and experience.
@@ -108,7 +108,7 @@ npm run dev
 
 ---
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This tool is built for educational and personal use. When using browser automation to apply for jobs on platforms like LinkedIn or Indeed, please ensure you comply with their respective Terms of Service. Be mindful of AI hallucinations when submitting automated cover letters!
 
