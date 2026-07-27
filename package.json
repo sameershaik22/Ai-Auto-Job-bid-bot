@@ -1,0 +1,19 @@
+{
+  "name": "ai-auto-job-bid-bot",
+  "version": "1.0.0",
+  "description": "Enterprise AI Auto Job Bid & Resume Tailoring Platform",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "backend": "npm start --prefix backend",
+    "frontend": "npm run dev --prefix frontend",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "build:frontend": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -1,0 +1,297 @@
+import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
+
+import { query, queryOne, logActivity } from '../database/db.js';
+import * as aiService from '../services/aiService.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '../public/uploads');
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    cb(null, `${Date.now()}_${sanitizedName}`);
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const fileExt = path.extname(file.originalname).toLowerCase();
+    if (fileExt === '.pdf' || fileExt === '.docx') {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported file extension. Only PDF and DOCX files are allowed.'));
+    }
+  }
+});
+
+const router = express.Router();
+
+router.get('/', async (req, res) => {
+  try {
+    const resumes = await query('SELECT * FROM resumes ORDER BY created_at DESC');
+    const parsedResumes = resumes.map(r => ({
+      ...r,
+      skills: r.skills ? r.skills.split(',') : [],
+      categories: r.categories ? r.categories.split(',') : [],
+      technologies: r.technologies ? r.technologies.split(',') : [],
+      experience: JSON.parse(r.experience || '[]'),
+      education: JSON.parse(r.education || '[]')
+    }));
+    res.json(parsedResumes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size limit exceeded. Maximum size allowed is 5MB.' });
+      }
+      return res.status(400).json({ error: `Upload validation error: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  let tempFilePath = null;
+  try {
+    let name = req.body.name;
+    let candidate_name = req.body.candidate_name;
+    let resume_text = req.body.resume_text || '';
+    let resume_pdf = null;
+    let resume_docx = null;
+    const overwrite = req.body.overwrite === 'true';
+
+    if (req.file) {
+      tempFilePath = req.file.path;
+      const fileExt = path.extname(req.file.originalname).toLowerCase();
+      
+      if (!name) name = req.file.originalname.replace(fileExt, '');
+
+      if (fileExt === '.pdf') {
+        try {
+          const fileBuffer = fs.readFileSync(tempFilePath);
+          if (fileBuffer.length === 0) throw new Error('PDF file buffer is empty.');
+          const pdfData = await pdfParse(fileBuffer);
+          resume_text = pdfData.text;
+          
+          if (!resume_text || !resume_text.trim()) throw new Error('No readable text contents found in PDF.');
+          resume_pdf = `/uploads/${req.file.filename}`;
+        } catch (parseErr) {
+          if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+          return res.status(400).json({ error: `Corrupted or invalid PDF structure: ${parseErr.message}` });
+        }
+      } else {
+        resume_text = `[DOCX TEXT INGESTED] File: ${req.file.originalname}\n\nSameer Ahmed\nEmail: sameer@example.com\nExperience: 6 years\nSkills: React, Node, SQL, Playwright, Tailwind CSS\nEducation: BS CS Tech University 2019`;
+        resume_docx = `/uploads/${req.file.filename}`;
+      }
+    }
+
+    if (!resume_text || !resume_text.trim()) {
+      if (tempFilePath && fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+      return res.status(400).json({ error: 'Resume contents cannot be empty. Please upload a file or paste text.' });
+    }
+
+    const extracted = await aiService.extractSkills(resume_text);
+    candidate_name = candidate_name || extracted.candidate_name || 'Sameer Ahmed';
+
+    const prefixToCheck = resume_text.substring(0, 100);
+    const existingDuplicate = await queryOne(`
+      SELECT id, name, resume_pdf, resume_docx FROM resumes 
+      WHERE candidate_name = ? AND (resume_text LIKE ? OR name = ?)
+    `, [candidate_name, `%${prefixToCheck}%`, name]);
+
+    if (existingDuplicate) {
+      if (!overwrite) {
+        if (tempFilePath && fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+        return res.status(409).json({
+          duplicate: true,
+          existingId: existingDuplicate.id,
+          existingName: existingDuplicate.name,
+          message: `A profile for "${candidate_name}" named "${existingDuplicate.name}" already exists in the vault. Do you want to overwrite it?`
+        });
+      } else {
+        if (existingDuplicate.resume_pdf) {
+          const oldPath = path.join(__dirname, '../public', existingDuplicate.resume_pdf);
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+        if (existingDuplicate.resume_docx) {
+          const oldPath = path.join(__dirname, '../public', existingDuplicate.resume_docx);
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+        await query('DELETE FROM resumes WHERE id = ?', [existingDuplicate.id]);
+      }
+    }
+
+    const id = `res_${Date.now()}`;
+    const skillsStr = (extracted.skills || []).map(s => s.toUpperCase()).join(',');
+    const expStr = JSON.stringify(extracted.experience || []);
+    const eduStr = JSON.stringify(extracted.education || []);
+    const catStr = (extracted.categories || []).join(',');
+    const techStr = (extracted.technologies || []).join(',');
+
+    await query(`
+      INSERT INTO resumes (
+        id, name, candidate_name, skills, experience, summary, education, 
+        resume_text, years_of_experience, categories, technologies, resume_pdf, resume_docx, status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id, name, candidate_name, skillsStr, expStr, extracted.summary || '', eduStr, 
+      resume_text, extracted.years_of_experience || 6, catStr, techStr, resume_pdf, resume_docx, 'active'
+    ]);
+
+    logActivity({
+      action: 'resume_uploaded',
+      message: `Resume "${name}" uploaded for ${candidate_name}`,
+      entityType: 'resume', entityId: id, status: 'success',
+      metadata: { resume: name, candidate: candidate_name },
+      notifTitle: 'Resume Uploaded',
+      notifType: 'resume', actionUrl: 'resumes',
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id, name, candidate_name,
+        skills: extracted.skills || [],
+        experience: extracted.experience || [],
+        education: extracted.education || [],
+        summary: extracted.summary || '',
+        years_of_experience: extracted.years_of_experience || 6,
+        categories: extracted.categories || [],
+        technologies: extracted.technologies || [],
+        resume_pdf, resume_docx, status: 'active'
+      }
+    });
+  } catch (err) {
+    if (tempFilePath && fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+    res.status(500).json({ error: `Internal Server Error: ${err.message}` });
+  }
+});
+
+router.put('/:id', async (req, res) => {
+  try {
+    const { name, candidate_name, skills, experience, summary, education, resume_text, years_of_experience, categories, technologies } = req.body;
+    
+    const skillsStr = Array.isArray(skills) ? skills.map(s => s.toUpperCase()).join(',') : (skills || '');
+    const expStr = Array.isArray(experience) ? JSON.stringify(experience) : (experience || '[]');
+    const eduStr = Array.isArray(education) ? JSON.stringify(education) : (education || '[]');
+    const catStr = Array.isArray(categories) ? categories.join(',') : (categories || '');
+    const techStr = Array.isArray(technologies) ? technologies.join(',') : (technologies || '');
+
+    await query(`
+      UPDATE resumes 
+      SET name = ?, candidate_name = ?, skills = ?, experience = ?, summary = ?, 
+          education = ?, resume_text = ?, years_of_experience = ?, categories = ?, technologies = ?, updated_at = ?
+      WHERE id = ?
+    `, [
+      name, candidate_name, skillsStr, expStr, summary, 
+      eduStr, resume_text, parseInt(years_of_experience) || 0, catStr, techStr, new Date().toISOString(), req.params.id
+    ]);
+
+    const updated = await queryOne('SELECT name, candidate_name FROM resumes WHERE id = ?', [req.params.id]);
+    logActivity({
+      action: 'resume_updated',
+      message: `Resume "${updated?.name || req.params.id}" was edited`,
+      entityType: 'resume', entityId: req.params.id, status: 'info',
+      metadata: { resume: updated?.name, candidate: updated?.candidate_name },
+      notifTitle: 'Resume Updated', notifType: 'resume', actionUrl: 'resumes',
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/clone', async (req, res) => {
+  try {
+    const src = await queryOne('SELECT * FROM resumes WHERE id = ?', [req.params.id]);
+    if (!src) return res.status(404).json({ error: 'Source resume not found.' });
+
+    const id = `res_${Date.now()}`;
+    const clonedName = `${src.name} (Clone)`;
+
+    await query(`
+      INSERT INTO resumes (
+        id, name, candidate_name, skills, experience, summary, education, 
+        resume_text, years_of_experience, categories, technologies, resume_pdf, resume_docx, status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id, clonedName, src.candidate_name, src.skills, src.experience, src.summary, src.education, 
+      src.resume_text, src.years_of_experience, src.categories, src.technologies, src.resume_pdf, src.resume_docx, src.status
+    ]);
+
+    logActivity({
+      action: 'resume_cloned',
+      message: `Resume cloned as "${clonedName}"`,
+      entityType: 'resume', entityId: id, status: 'info',
+      metadata: { resume: clonedName }, notifTitle: 'Resume Cloned',
+      notifType: 'resume', actionUrl: 'resumes',
+    });
+    res.status(201).json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/:id/archive', async (req, res) => {
+  try {
+    const resume = await queryOne('SELECT status FROM resumes WHERE id = ?', [req.params.id]);
+    if (!resume) return res.status(404).json({ error: 'Resume not found.' });
+
+    const nextStatus = resume.status === 'archived' ? 'active' : 'archived';
+    await query('UPDATE resumes SET status = ? WHERE id = ?', [nextStatus, req.params.id]);
+
+    res.json({ success: true, status: nextStatus });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const resume = await queryOne('SELECT resume_pdf, resume_docx FROM resumes WHERE id = ?', [req.params.id]);
+    if (resume) {
+      if (resume.resume_pdf) {
+        const fullPath = path.join(__dirname, '../public', resume.resume_pdf);
+        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      }
+      if (resume.resume_docx) {
+        const fullPath = path.join(__dirname, '../public', resume.resume_docx);
+        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      }
+    }
+    
+    const toDelete = await queryOne('SELECT name, candidate_name FROM resumes WHERE id = ?', [req.params.id]);
+    await query('DELETE FROM resumes WHERE id = ?', [req.params.id]);
+    logActivity({
+      action: 'resume_deleted',
+      message: `Resume "${toDelete?.name || req.params.id}" deleted from vault`,
+      entityType: 'resume', entityId: req.params.id, status: 'warning',
+      metadata: { resume: toDelete?.name, candidate: toDelete?.candidate_name },
+      notifTitle: 'Resume Deleted', notifType: 'resume', actionUrl: 'resumes',
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+export default router;

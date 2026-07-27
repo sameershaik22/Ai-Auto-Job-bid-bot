@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeverageHQ | Demo Application Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fafafa;
+      --card-bg: #ffffff;
+      --text: #171717;
+      --text-secondary: #737373;
+      --border: #e5e5e5;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #16a34a;
+    }
+
+    /* Simple dark theme toggle if needed, default is sleek corporate light theme resembling Greenhouse/Lever */
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      line-height: 1.5;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      background-color: var(--card-bg);
+      padding: 1.5rem 2rem;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 3rem auto;
+      padding: 0 1.5rem;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background-color: #eff6ff;
+      color: var(--primary);
+      border-radius: 9999px;
+      font-weight: 500;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .meta {
+      display: flex;
+      gap: 1.5rem;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .job-description {
+      color: #374151;
+      margin-bottom: 2.5rem;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      box-sizing: border-box;
+      background-color: #fbfbfb;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      background-color: #fafafa;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .upload-zone:hover {
+      border-color: var(--primary);
+    }
+
+    .btn {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.85rem 2rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.15s;
+      width: 100%;
+    }
+
+    .btn:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .success-panel {
+      display: none;
+      text-align: center;
+      padding: 3rem 1.5rem;
+    }
+
+    .success-icon {
+      font-size: 3rem;
+      color: var(--success);
+      margin-bottom: 1rem;
+    }
+
+    /* Recruiter Dashboard Drawer Toggle */
+    .admin-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #171717;
+      color: white;
+      border: none;
+      border-radius: 30px;
+      padding: 0.75rem 1.5rem;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      z-index: 100;
+    }
+
+    .admin-dashboard {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      width: 100%;
+      max-width: 800px;
+      height: 100%;
+      background: white;
+      border-left: 1px solid var(--border);
+      box-shadow: -4px 0 30px rgba(0,0,0,0.1);
+      transition: right 0.3s ease;
+      z-index: 99;
+      padding: 2rem;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+
+    .admin-dashboard.open {
+      right: 0;
+    }
+
+    .admin-close {
+      float: right;
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem;
+      text-align: left;
+    }
+
+    th {
+      font-weight: 600;
+      background: #f5f5f5;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div style="max-width: 1000px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;">
+      <span style="font-weight: 700; font-size: 1.2rem; letter-spacing: -0.5px;">Leverage<span style="color:var(--primary)">HQ</span></span>
+      <span style="font-size: 0.85rem; color: var(--text-secondary)">Demo Applicant Tracking Sandbox</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Application View -->
+    <div class="card" id="apply-card">
+      <span class="badge">Engineering</span>
+      <h1 id="job-title">Staff Full Stack Engineer (React/Node)</h1>
+      <div class="meta">
+        <span>TechCorp International</span>
+        <span>Remote (Global)</span>
+        <span>Full-Time</span>
+      </div>
+
+      <div class="job-description">
+        <p>We are looking for a Staff Full Stack Developer with expert-level proficiency in React, Node.js, and browser-automation engines. You will lead design systems engineering and build autonomous workflows.</p>
+        <strong>Requirements:</strong>
+        <ul>
+          <li>6+ years of production experience in JavaScript/TypeScript stacks</li>
+          <li>In-depth familiarity with relational database tuning (Postgres)</li>
+          <li>Proven experience setting up continuous testing flows (Playwright/Puppeteer)</li>
+        </ul>
+      </div>
+
+      <hr style="border: 0; border-top: 1px solid var(--border); margin: 2rem 0;">
+
+      <form id="apply-form" onsubmit="submitForm(event)">
+        <h2>Apply for this Job</h2>
+        
+        <div class="form-group">
+          <label for="fullName">Full Name *</label>
+          <input type="text" id="fullName" required placeholder="Enter full name">
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email Address *</label>
+          <input type="email" id="email" required placeholder="name@company.com">
+        </div>
+
+        <div class="form-group">
+          <label for="resume">Resume / CV *</label>
+          <div class="upload-zone" onclick="document.getElementById('resume-file').click()" id="upload-zone">
+            <span id="upload-status" style="color: var(--text-secondary)">Drag and drop or click to upload PDF/DOCX</span>
+            <input type="file" id="resume-file" style="display:none" onchange="fileSelected(event)">
+            <input type="hidden" id="resume-text" value="">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="skills">Key Technical Skills *</label>
+          <textarea id="skills" required placeholder="e.g. React, Node.js, Postgres"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="coverLetter">Cover Letter *</label>
+          <textarea id="coverLetter" required placeholder="Draft cover letter..."></textarea>
+        </div>
+
+        <button type="submit" class="btn" id="submit-btn">Submit Application</button>
+      </form>
+    </div>
+
+    <!-- Success View -->
+    <div class="card success-panel" id="success-card">
+      <div class="success-icon">✓</div>
+      <h1>Application Submitted!</h1>
+      <p style="color: var(--text-secondary); margin-bottom: 2rem;">
+        Thank you for applying. Your application was successfully processed by our LeverageHQ ATS system. 
+        Tracking ID: <strong id="tracking-id">LV-89240</strong>
+      </p>
+      <button class="btn" onclick="resetForm()">Apply Again</button>
+    </div>
+  </div>
+
+  <!-- Admin Panel Toggle -->
+  <button class="admin-toggle" onclick="toggleAdmin()">Recruiter Admin View</button>
+
+  <!-- Admin Panel Sidebar Drawer -->
+  <div class="admin-dashboard" id="admin-panel">
+    <button class="admin-close" onclick="toggleAdmin()">×</button>
+    <h2>LeverageHQ Recruiter View</h2>
+    <p style="color: var(--text-secondary); font-size: 0.9rem;">Review applications parsed into the ATS queue.</p>
+    
+    <table id="applications-table">
+      <thead>
+        <tr>
+          <th>Candidate</th>
+          <th>Email</th>
+          <th>Skills</th>
+          <th>Submitted At</th>
+        </tr>
+      </thead>
+      <tbody id="applications-list">
+        <!-- Rendered dynamically -->
+        <tr>
+          <td colspan="4" style="text-align: center; color: var(--text-secondary)">No submissions yet. Submit form or run automation.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // Initialize LocalStorage application cache
+    function getApplications() {
+      return JSON.parse(localStorage.getItem('mock_applicants') || '[]');
+    }
+
+    function saveApplication(app) {
+      const apps = getApplications();
+      apps.push(app);
+      localStorage.setItem('mock_applicants', JSON.stringify(apps));
+      // Notify parent/Express backend if possible, otherwise keep local
+      fetch('/api/mock-recruiter/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(app)
+      }).catch(err => console.log('Local standalone execution - skipped backend callback'));
+    }
+
+    function fileSelected(event) {
+      const file = event.target.files[0];
+      if (file) {
+        document.getElementById('upload-status').innerText = 'Selected file: ' + file.name;
+        document.getElementById('upload-status').style.color = '#16a34a';
+        document.getElementById('resume-text').value = 'MOCK RESUME TEXT CONTENT FOR: ' + file.name;
+      }
+    }
+
+    function submitForm(event) {
+      event.preventDefault();
+      
+      const app = {
+        fullName: document.getElementById('fullName').value,
+        email: document.getElementById('email').value,
+        skills: document.getElementById('skills').value,
+        coverLetter: document.getElementById('coverLetter').value,
+        resumeName: document.getElementById('resume-file').files[0]?.name || 'simulated_cv.pdf',
+        submittedAt: new Date().toLocaleString()
+      };
+
+      saveApplication(app);
+      renderAdmin();
+
+      // Show success screen
+      document.getElementById('apply-card').style.display = 'none';
+      document.getElementById('success-card').style.display = 'block';
+      document.getElementById('tracking-id').innerText = 'LV-' + Math.floor(100000 + Math.random() * 900000);
+    }
+
+    function resetForm() {
+      document.getElementById('apply-form').reset();
+      document.getElementById('upload-status').innerText = 'Drag and drop or click to upload PDF/DOCX';
+      document.getElementById('upload-status').style.color = 'var(--text-secondary)';
+      document.getElementById('success-card').style.display = 'none';
+      document.getElementById('apply-card').style.display = 'block';
+    }
+
+    function toggleAdmin() {
+      const panel = document.getElementById('admin-panel');
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) {
+        renderAdmin();
+      }
+    }
+
+    function renderAdmin() {
+      const apps = getApplications();
+      const list = document.getElementById('applications-list');
+      if (apps.length === 0) {
+        list.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary)">No submissions yet. Submit form or run automation.</td></tr>`;
+        return;
+      }
+      list.innerHTML = apps.map(app => `
+        <tr>
+          <td><strong>${app.fullName}</strong><br><span style="font-size:0.75rem; color:var(--text-secondary)">${app.resumeName}</span></td>
+          <td>${app.email}</td>
+          <td><span style="font-size:0.8rem; background:#f0f0f0; padding:2px 6px; border-radius:4px;">${app.skills.slice(0,35)}...</span></td>
+          <td>${app.submittedAt}</td>
+        </tr>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
