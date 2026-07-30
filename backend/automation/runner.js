@@ -4,6 +4,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { query, queryOne } from '../database/db.js';
 import MockPortalPlugin from './plugins/mock_portal.js';
+import LeverPlugin from './plugins/lever.js';
+import GreenhousePlugin from './plugins/greenhouse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -94,10 +96,16 @@ export async function runAutomation(applicationId, io) {
     page = await context.newPage();
 
     let pluginInstance = null;
-    if (app.website === 'mock_portal' || app.website === 'lever' || app.website === 'greenhouse') {
+    const targetSite = app.website ? app.website.toLowerCase() : '';
+
+    if (targetSite.includes('lever') || targetSite === 'lever') {
+      pluginInstance = new LeverPlugin(page, logger, {});
+    } else if (targetSite.includes('greenhouse') || targetSite === 'greenhouse') {
+      pluginInstance = new GreenhousePlugin(page, logger, {});
+    } else if (targetSite === 'mock_portal' || app.url.includes('mock-recruiter')) {
       pluginInstance = new MockPortalPlugin(page, logger, {});
     } else {
-      await logger.warning(`Site plugin for "${app.website}" not loaded. Using default demo sandbox plugin.`);
+      await logger.warning(`Site plugin for "${app.website}" not loaded. Falling back to default demo sandbox.`);
       pluginInstance = new MockPortalPlugin(page, logger, {});
     }
 
