@@ -25,10 +25,10 @@ const socket = io(window.location.origin);
 
 const NAV_MAIN = [
   { id: 'dashboard',    label: 'Dashboard',    Icon: LayoutDashboard },
-  { id: 'resumes',      label: 'Resumes',       Icon: FileText },
+  { id: 'resumes',      label: 'Profiles',      Icon: User },
   { id: 'jobs',         label: 'Jobs',          Icon: Briefcase },
   { id: 'applications', label: 'Applications',  Icon: ClipboardList },
-  { id: 'automation',   label: 'Automation',    Icon: Zap },
+  { id: 'automation',   label: 'Queue',         Icon: Zap },
   { id: 'ai-tools',     label: 'AI Tools',      Icon: Bot },
   { id: 'reports',      label: 'Reports',       Icon: BarChart2 },
   { id: 'logs',         label: 'Logs',          Icon: BookOpen },
@@ -37,16 +37,16 @@ const NAV_MAIN = [
 ];
 
 const PAGE_TITLES = {
-  dashboard:    { title: 'Dashboard',    sub: 'Overview of your automation performance and activities' },
-  resumes:      { title: 'Resumes',      sub: 'Manage and tailor your professional resumes' },
-  jobs:         { title: 'Jobs',         sub: 'Browse and import job listings from any platform' },
-  applications: { title: 'Applications', sub: 'Track the status of all your submitted applications' },
-  automation:   { title: 'Automation',   sub: 'Configure and run automated job application workflows' },
-  'ai-tools':   { title: 'AI Tools',     sub: 'AI-powered tools to optimise your job search' },
-  reports:      { title: 'Reports',      sub: 'Analytics, success rates, and performance insights' },
-  logs:         { title: 'Logs',         sub: 'Full activity and audit trail for all automation runs' },
-  integrations: { title: 'Integrations', sub: 'Connect and manage your job platform accounts' },
-  settings:     { title: 'Settings',     sub: 'Configure AI keys, browser settings and system preferences' },
+  dashboard:    { title: 'Dashboard',           sub: 'Overview of your automation performance and activities' },
+  resumes:      { title: 'Candidate Profiles',  sub: 'Manage multi-candidate profiles for autonomous job applications' },
+  jobs:         { title: 'Job Board',           sub: 'Browse and import job listings — ATS auto-detected from URL' },
+  applications: { title: 'Applications',        sub: 'Track the status of all submitted applications' },
+  automation:   { title: 'Queue Builder',       sub: 'Select candidates × jobs and launch fully autonomous automation' },
+  'ai-tools':   { title: 'AI Tools',            sub: 'AI-powered tools to optimise your job search' },
+  reports:      { title: 'Reports',             sub: 'Analytics, success rates, and performance insights' },
+  logs:         { title: 'Logs',                sub: 'Full activity and audit trail for all automation runs' },
+  integrations: { title: 'Integrations',        sub: 'Connect and manage your job platform accounts' },
+  settings:     { title: 'Settings',            sub: 'Configure AI keys, browser settings and platform credentials' },
 };
 
 function NotifIcon({ type }) {

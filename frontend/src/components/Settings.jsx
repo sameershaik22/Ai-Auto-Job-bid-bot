@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Monitor, ShieldAlert, CheckCircle, Save, Cpu, User, RefreshCw } from 'lucide-react';
+import { Key, Monitor, ShieldAlert, CheckCircle, Save, Cpu, User, RefreshCw, Lock } from 'lucide-react';
 
 const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14 };
 const muted = { color: 'var(--text-muted)' };
@@ -28,6 +28,11 @@ export default function SettingsView({ user: userProp, onUserSave }) {
   const [health, setHealth] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
 
+  const [credentials, setCredentials] = useState({});
+  const [credSaving, setCredSaving] = useState({});
+
+  const PLATFORMS = ['LinkedIn', 'Indeed', 'Workday', 'Greenhouse', 'Lever'];
+
   useEffect(() => {
     fetch('/api/settings').then(r => r.ok ? r.json() : {}).then(d => {
       setGeminiKey(d.GEMINI_API_KEY   || '');
@@ -36,6 +41,12 @@ export default function SettingsView({ user: userProp, onUserSave }) {
       setTypingDelay(d.TYPING_DELAY   || '80');
       setMaxRetries(d.MAX_RETRIES     || '1');
       setConcurrency(d.CONCURRENCY    || '1');
+    }).catch(console.error);
+
+    fetch('/api/credentials').then(r => r.ok ? r.json() : []).then(rows => {
+      const map = {};
+      rows.forEach(r => { map[r.platform] = { email: r.email || '', password: '' }; });
+      setCredentials(map);
     }).catch(console.error);
   }, []);
 
@@ -76,31 +87,34 @@ export default function SettingsView({ user: userProp, onUserSave }) {
     finally { setLoading(false); }
   };
 
-  const handleSaveSettings = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  const handleSaveCredential = async (platform) => {
+    const cred = credentials[platform];
+    if (!cred?.email) { alert('Email is required'); return; }
+    setCredSaving(p => ({ ...p, [platform]: true }));
     try {
-      const res = await fetch('/api/settings', {
+      const res = await fetch('/api/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          GEMINI_API_KEY: geminiKey, OPENAI_API_KEY: openaiKey,
-          HEADLESS_MODE: headlessMode, TYPING_DELAY: typingDelay,
-          MAX_RETRIES: maxRetries, CONCURRENCY: concurrency,
-        }),
+        body: JSON.stringify({ platform: platform.toLowerCase(), email: cred.email, password: cred.password }),
       });
-      if (res.ok) { setSuccess('Settings saved!'); setTimeout(() => setSuccess(''), 3000); }
-      else alert('Failed to save settings.');
-    } catch (e) { alert('Error saving settings.'); }
-    finally { setLoading(false); }
+      if (res.ok) { setSuccess(`${platform} credentials saved!`); setTimeout(() => setSuccess(''), 3000); }
+      else { const e = await res.json(); alert(e.error || 'Save failed'); }
+    } catch (e) { alert('Error saving credentials'); }
+    finally { setCredSaving(p => ({ ...p, [platform]: false })); }
+  };
+
+  const handleDeleteCredential = async (platform) => {
+    await fetch(`/api/credentials/${platform.toLowerCase()}`, { method: 'DELETE' });
+    setCredentials(p => { const n = { ...p }; delete n[platform]; return n; });
   };
 
   const navItems = [
-    { id: 'profile',  Icon: User,        label: 'User Profile'       },
-    { id: 'api',      Icon: Key,         label: 'API Credentials'    },
-    { id: 'browser',  Icon: Monitor,     label: 'Browser Settings'   },
-    { id: 'advanced', Icon: ShieldAlert, label: 'Queue & Security'   },
-    { id: 'health',   Icon: Cpu,         label: 'System Health'      },
+    { id: 'profile',     Icon: User,        label: 'User Profile'        },
+    { id: 'api',         Icon: Key,         label: 'API Credentials'     },
+    { id: 'credentials', Icon: Lock,        label: 'Platform Logins'     },
+    { id: 'browser',     Icon: Monitor,     label: 'Browser Settings'    },
+    { id: 'advanced',    Icon: ShieldAlert, label: 'Queue & Security'    },
+    { id: 'health',      Icon: Cpu,         label: 'System Health'       },
   ];
 
   const isProfileTab = activeSubTab === 'profile';
@@ -225,6 +239,52 @@ export default function SettingsView({ user: userProp, onUserSave }) {
                 </button>
               </div>
             </form>
+          )}
+
+          {}
+          {activeSubTab === 'credentials' && (
+            <div className="p-6 rounded-xl space-y-5 shadow-sm" style={card}>
+              <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 border-b pb-3"
+                style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>
+                <Lock className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Platform Login Credentials
+              </h3>
+              <p className="text-xs" style={muted}>
+                Credentials are AES-256 encrypted before storage. The bot uses these to log in to platforms that require authentication before applying.
+              </p>
+              <div className="space-y-4">
+                {PLATFORMS.map(platform => {
+                  const cred = credentials[platform] || { email: '', password: '' };
+                  const isSaving = credSaving[platform];
+                  return (
+                    <div key={platform} className="p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                      <div className="flex justify-between items-center">
+                        <div className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{platform}</div>
+                        {credentials[platform]?.email && (
+                          <button onClick={() => handleDeleteCredential(platform)} className="text-xs" style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <input
+                          type="email" placeholder={`${platform} email`} value={cred.email}
+                          onChange={e => setCredentials(p => ({ ...p, [platform]: { ...cred, email: e.target.value } }))}
+                          className={inputCls} style={inputStyle}
+                        />
+                        <input
+                          type="password" placeholder="Password" value={cred.password}
+                          onChange={e => setCredentials(p => ({ ...p, [platform]: { ...cred, password: e.target.value } }))}
+                          className={inputCls} style={monoStyle}
+                        />
+                      </div>
+                      <button onClick={() => handleSaveCredential(platform)} disabled={isSaving}
+                        className="px-4 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5"
+                        style={{ background: isSaving ? '#818cf8' : 'var(--accent)', border: 'none', cursor: 'pointer' }}>
+                        <Save className="w-3 h-3" /> {isSaving ? 'Saving…' : `Save ${platform}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {}

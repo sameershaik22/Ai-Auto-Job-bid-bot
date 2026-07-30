@@ -25,6 +25,9 @@ import resumesRouter from './routes/resumes.js';
 import jobsRouter from './routes/jobs.js';
 import aiRouter from './routes/ai.js';
 import applicationsRouter from './routes/applications.js';
+import candidatesRouter from './routes/candidates.js';
+import credentialsRouter from './routes/credentials.js';
+import queueRouter from './routes/queue.js';
 import { runAutomation } from './automation/runner.js';
 import { scrapeJobUrl } from './services/scraperService.js';
 import { setIO } from './socket.js';
@@ -90,9 +93,12 @@ app.use('/uploads', express.static(uploadsDir));
 
 app.use('/api/auth', authRouter);
 app.use('/api/resumes', resumesRouter);
+app.use('/api/candidates', candidatesRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/applications', applicationsRouter);
+app.use('/api/credentials', credentialsRouter);
+app.use('/api/queue', queueRouter);
 
 io.on('connection', (socket) => {
   console.log(`Socket client connected: ${socket.id}`);

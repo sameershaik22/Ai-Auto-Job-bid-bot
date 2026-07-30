@@ -5,6 +5,21 @@ import { scrapeJobUrl } from '../services/scraperService.js';
 
 const router = express.Router();
 
+function detectATSPlatform(url) {
+  if (!url) return 'generic';
+  const u = url.toLowerCase();
+  if (u.includes('jobs.lever.co') || u.includes('lever.co/')) return 'lever';
+  if (u.includes('boards.greenhouse.io') || u.includes('greenhouse.io')) return 'greenhouse';
+  if (u.includes('ashbyhq.com') || u.includes('jobs.ashbyhq.com')) return 'ashby';
+  if (u.includes('smartrecruiters.com')) return 'smartrecruiters';
+  if (u.includes('workday.com') || u.includes('myworkdayjobs.com')) return 'workday';
+  if (u.includes('taleo.net')) return 'taleo';
+  if (u.includes('icims.com')) return 'icims';
+  if (u.includes('bamboohr.com')) return 'bamboohr';
+  if (u.includes('localhost') || u.includes('mock-recruiter')) return 'mock_portal';
+  return 'generic';
+}
+
 router.get('/', async (req, res) => {
   try {
     const jobs = await query('SELECT * FROM jobs ORDER BY created_at DESC');
@@ -84,16 +99,20 @@ router.post('/', async (req, res) => {
       }
     }
 
+    const atsPlatform = detectATSPlatform(url);
+
     await query(`
       INSERT INTO jobs (
-        id, url, title, company, description, skills_required, location, salary, 
+        id, url, title, company, description, skills_required, location, salary,
+        ats_platform,
         match_score, recommended_resume_id, recommended_resume_name, match_confidence,
         matched_skills, missing_skills, match_recommendations, ats_score, status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
     `, [
-      id, url, title, company, description, skillsStr, location || 'Remote', salary || 'TBD', 
-      bestScore, bestResumeId, bestResumeName, bestConfidence, 
+      id, url, title, company, description, skillsStr, location || 'Remote', salary || 'TBD',
+      atsPlatform,
+      bestScore, bestResumeId, bestResumeName, bestConfidence,
       bestMatchedSkills, bestMissingSkills, bestRecommendations, bestAtsScore, 'unapplied'
     ]);
 
