@@ -91,34 +91,36 @@ function parseMetadataFromTitleAndUrl(text, url = '', extraMeta = {}) {
   let title = extraMeta.title || '';
   let company = extraMeta.company || '';
 
-  const isDisclaimer = (str) => !str || str.length > 45 || /fee|notify|disclaimer|terms|privacy|copyright|cookie|register/i.test(str);
+  const isDisclaimer = (str) => !str || str.length > 50 || /fee|notify|disclaimer|terms|privacy|copyright|cookie|register|application/i.test(str);
 
   if (isDisclaimer(company)) company = '';
-  if (title.toLowerCase() === 'register') title = '';
+  if (title.toLowerCase() === 'register' || title.toLowerCase() === 'apply') title = '';
 
-  const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
-  const rawTitle = titleMatch ? titleMatch[1].trim() : '';
+  const ogTitleMatch = text.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+    text.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
+  const titleTagMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+
+  const rawTitle = (ogTitleMatch ? ogTitleMatch[1] : (titleTagMatch ? titleTagMatch[1] : '')).trim();
 
   if (rawTitle) {
     const cleaned = rawTitle
-      .replace(/\s*\|\s*Unstop$/i, '')
-      .replace(/\s*-\s*Unstop$/i, '')
-      .replace(/\s*\|\s*LinkedIn$/i, '')
-      .replace(/\s*\|\s*Indeed$/i, '')
+      .replace(/\s*\|\s*(?:Unstop|LinkedIn|Indeed|Glassdoor|ZipRecruiter|Monster|Naukri|SimplyHired)$/i, '')
+      .replace(/\s*-\s*(?:Unstop|LinkedIn|Indeed|Glassdoor|ZipRecruiter|Monster|Naukri|SimplyHired)$/i, '')
       .replace(/^Register for\s+/i, '')
+      .replace(/^Apply for\s+/i, '')
       .trim();
-    
+
     if (cleaned.includes(' at ')) {
       const parts = cleaned.split(' at ');
-      if (!title || title === 'Register') title = parts[0].trim();
+      if (!title) title = parts[0].trim();
       if (!company || isDisclaimer(company)) company = parts[1].split('|')[0].split('-')[0].trim();
     } else if (cleaned.includes(' - ')) {
       const parts = cleaned.split(' - ');
-      if (!title || title === 'Register') title = parts[0].trim();
+      if (!title) title = parts[0].trim();
       if (!company || isDisclaimer(company)) company = parts[1].split('|')[0].trim();
     } else if (cleaned.includes(' | ')) {
       const parts = cleaned.split(' | ');
-      if (!title || title === 'Register') title = parts[0].trim();
+      if (!title) title = parts[0].trim();
       if (!company || isDisclaimer(company)) company = parts[1].trim();
     } else if (!title) {
       title = cleaned;
@@ -136,19 +138,30 @@ function parseMetadataFromTitleAndUrl(text, url = '', extraMeta = {}) {
   if (!company && url) {
     try {
       const parsedUrl = new URL(url);
-      const domainParts = parsedUrl.hostname.replace('www.', '').split('.');
-      if (domainParts.length > 0) {
-        const brand = domainParts[0];
-        if (brand !== 'unstop') {
+      const hostParts = parsedUrl.hostname.replace('www.', '').split('.');
+      if (hostParts.length >= 2) {
+        const brand = hostParts[hostParts.length - 2];
+        if (!['unstop', 'com', 'org', 'net', 'co', 'io'].includes(brand.toLowerCase())) {
           company = brand.charAt(0).toUpperCase() + brand.slice(1);
         }
       }
     } catch {}
   }
 
+  if (!title && url) {
+    try {
+      const parsedUrl = new URL(url);
+      const segments = parsedUrl.pathname.split('/').filter(Boolean);
+      const last = segments.filter(s => !['register', 'apply', 'job', 'jobs', 'index.html'].includes(s.toLowerCase()) && !/^\d+$/.test(s)).pop();
+      if (last) {
+        title = last.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
+    } catch {}
+  }
+
   return {
-    title: (title && title !== 'Register') ? title : 'AI/ML Developer Internship',
-    company: (company && !isDisclaimer(company)) ? company : 'AI Tech Gen Technologies'
+    title: title || 'Target Vacancy Role',
+    company: company || 'Recruiting Company'
   };
 }
 
@@ -200,9 +213,10 @@ function runScraperSimulation(text, url = '', extraMeta = {}) {
     else if (lowercaseText.includes('frontend')) title = 'Frontend Engineer';
     else if (lowercaseText.includes('backend')) title = 'Backend Engineer';
     else if (lowercaseText.includes('fullstack') || lowercaseText.includes('full stack')) title = 'Full Stack Engineer';
+    else title = 'Software Engineer';
   }
 
-  const skillsList = ['React', 'Node.js', 'PostgreSQL', 'TypeScript', 'Playwright', 'Python', 'Machine Learning', 'Express', 'Tailwind CSS', 'Docker'];
+  const skillsList = ['React', 'Node.js', 'PostgreSQL', 'TypeScript', 'Playwright', 'Python', 'Machine Learning', 'Express', 'Tailwind CSS', 'Docker', 'AWS', 'Java', 'C++', 'Git'];
   const matchedSkills = skillsList.filter(skill => lowercaseText.includes(skill.toLowerCase()));
 
   const cleanDescription = text
@@ -215,7 +229,7 @@ function runScraperSimulation(text, url = '', extraMeta = {}) {
   return JSON.stringify({
     title,
     company,
-    description: cleanDescription.length > 50 ? cleanDescription : `Job posting for ${title} at ${company}. Required skills: ${matchedSkills.join(', ') || 'Software Development'}.`,
+    description: cleanDescription.length > 50 ? cleanDescription : `Job vacancy position for ${title} at ${company}. Skills required: ${matchedSkills.join(', ') || 'Software Engineering'}.`,
     skills_required: matchedSkills.length > 0 ? matchedSkills : ['React', 'Node.js', 'PostgreSQL', 'Python'],
     location: lowercaseText.includes('remote') ? 'Remote' : 'Hybrid / On-site',
     salary: 'Competitive'
