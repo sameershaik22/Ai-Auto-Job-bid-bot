@@ -45,7 +45,7 @@ export default class GenericPlugin extends BasePlugin {
         if (!label) label = el.placeholder || el.name || el.id || `field_${i}`;
 
         const selectorParts = [];
-        if (el.id) selectorParts.push(`#${el.id}`);
+        if (el.id) selectorParts.push(`[id="${el.id}"]`);
         else if (el.name) selectorParts.push(`${el.tagName.toLowerCase()}[name="${el.name}"]`);
         else selectorParts.push(`${el.tagName.toLowerCase()}:nth-of-type(${i + 1})`);
 
