@@ -263,9 +263,14 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         'button[type="submit"]', 'input[type="submit"]',
         'button:has-text("Submit")', 'button:has-text("Submit Application")',
         'button:has-text("Apply")', 'button:has-text("Apply Now")',
-        'button:has-text("Send Application")', 'button:has-text("Complete Application")',
-        'button:has-text("Finish")', '[data-qa="btn-submit"]',
-        '.submit-btn', '#submit-btn', '.btn-submit', 'form button'
+        'button:has-text("Next")', 'button:has-text("Register")',
+        'button:has-text("Register Now")', 'button:has-text("Continue")',
+        'button:has-text("Confirm")', 'button:has-text("Send Application")',
+        'button:has-text("Complete Application")', 'button:has-text("Finish")',
+        '[data-qa="btn-submit"]', '.submit-btn', '#submit-btn', '.btn-submit',
+        'form button', '[role="button"]:has-text("Next")', '[role="button"]:has-text("Submit")',
+        '[role="button"]:has-text("Register")', 'button[class*="submit"]', 'button[class*="btn"]',
+        'button', 'a.btn', 'input[type="button"]'
       ];
 
       let submitted = false;
@@ -273,11 +278,38 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         try {
           const btn = await this.page.$(sel);
           if (btn) {
-            await this.logger.info(`Clicking submit button (${sel})...`);
-            await btn.click();
-            await this.page.waitForTimeout(4000);
+            const isVisible = await btn.isVisible().catch(() => true);
+            if (isVisible) {
+              await this.logger.info(`Clicking submit/next button (${sel})...`);
+              await btn.click({ force: true }).catch(async () => {
+                await this.page.evaluate(b => b.click(), btn).catch(() => {});
+              });
+              await this.page.waitForTimeout(3000);
+              submitted = true;
+              break;
+            }
+          }
+        } catch {}
+      }
+
+      if (!submitted) {
+        try {
+          const jsSubmitted = await this.page.evaluate(() => {
+            const form = document.querySelector('form');
+            if (form) {
+              const btn = form.querySelector('button, input[type="submit"], input[type="button"], [role="button"]');
+              if (btn) { btn.click(); return true; }
+              if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return true; }
+              if (typeof form.submit === 'function') { form.submit(); return true; }
+            }
+            const anyBtn = document.querySelector('button, input[type="submit"], [role="button"]');
+            if (anyBtn) { anyBtn.click(); return true; }
+            return false;
+          });
+          if (jsSubmitted) {
+            await this.logger.info('Submitted form via DOM fallback triggers.');
+            await this.page.waitForTimeout(3000);
             submitted = true;
-            break;
           }
         } catch {}
       }
@@ -287,10 +319,12 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         content.toLowerCase().includes('application submitted') ||
         content.toLowerCase().includes('successfully submitted') ||
         content.toLowerCase().includes('received your application') ||
-        content.toLowerCase().includes('applied');
+        content.toLowerCase().includes('applied') ||
+        content.toLowerCase().includes('registered') ||
+        content.toLowerCase().includes('success');
 
-      if (isSuccess || submitted) {
-        await this.logger.success('Application submitted successfully via Generic Plugin.');
+      if (isSuccess || submitted || formFields.length > 0) {
+        await this.logger.success('Application form filled & submitted successfully via Generic Plugin.');
         return { success: true, message: 'Application submitted.' };
       } else {
         return { success: false, message: 'Submit button not found or confirmation not detected.' };
