@@ -118,9 +118,23 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
       ? extracted.candidate_name
       : (dynamicName || 'Candidate Profile');
 
+    const textLower = resume_text.toLowerCase();
+    let detectedRole = 'Software Engineer';
+    if (textLower.includes('ai/ml') || textLower.includes('machine learning') || textLower.includes('deep learning')) detectedRole = 'AI/ML Engineer';
+    else if (textLower.includes('pm') || textLower.includes('product manager') || textLower.includes('product lead')) detectedRole = 'Product Manager (PM)';
+    else if (textLower.includes('fullstack') || textLower.includes('full stack')) detectedRole = 'Full Stack Engineer';
+    else if (textLower.includes('frontend') || textLower.includes('react')) detectedRole = 'Frontend Engineer';
+    else if (textLower.includes('backend') || textLower.includes('node')) detectedRole = 'Backend Engineer';
+
+    const profileTitle = req.file 
+      ? req.file.originalname.replace(/\.[^/.]+$/, '') 
+      : `${parsedCandidateName} - ${detectedRole}`;
+
     const result = {
       success: true,
+      name: profileTitle,
       candidate_name: parsedCandidateName,
+      target_role: detectedRole,
       email: emailMatch ? emailMatch[0] : '',
       phone: phoneMatch ? phoneMatch[0] : '',
       location: extracted.location || '',

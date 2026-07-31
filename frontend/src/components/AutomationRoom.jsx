@@ -283,9 +283,24 @@ export default function AutomationRoom({ socket }) {
                     }}>
                       {c.candidate_name?.charAt(0)?.toUpperCase()}
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.candidate_name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.email || `${c.years_of_experience || 0}y experience`}</div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {c.candidate_name}
+                        </span>
+                        {c.name && (
+                          <span style={{
+                            fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                            background: 'rgba(99,102,241,0.15)', color: 'var(--accent)', fontWeight: 700,
+                            border: '1px solid rgba(99,102,241,0.3)', whiteSpace: 'nowrap'
+                          }}>
+                            🎯 {c.name}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                        {c.email || `${c.years_of_experience || 0}y experience`}
+                      </div>
                     </div>
                   </div>
                 );

@@ -242,7 +242,18 @@ export default function CandidateProfiles() {
                         {c.candidate_name?.charAt(0)?.toUpperCase() || 'C'}
                       </div>
                       <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{c.candidate_name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{c.candidate_name}</div>
+                          {c.name && (
+                            <span style={{
+                              fontSize: 10, padding: '2px 8px', borderRadius: 6,
+                              background: 'rgba(99,102,241,0.15)', color: 'var(--accent)', fontWeight: 700,
+                              border: '1px solid rgba(99,102,241,0.3)'
+                            }}>
+                              🎯 {c.name}
+                            </span>
+                          )}
+                        </div>
                         {c.email && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{c.email}</div>}
                         {c.location && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.location}</div>}
                       </div>
@@ -334,7 +345,13 @@ export default function CandidateProfiles() {
                 )}
               </div>
 
-              {sectionLabel('Personal Info')}
+              {sectionLabel('Profile & Personal Info')}
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700, display: 'block', marginBottom: 4 }}>
+                  🎯 Target Role / Resume Title * (e.g. AI/ML, ML, PM, Full Stack)
+                </label>
+                {field('name', 'e.g. AI/ML Engineer Resume')}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Full Name *</label>
