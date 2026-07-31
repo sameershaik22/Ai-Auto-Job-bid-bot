@@ -107,15 +107,20 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
     }
 
     const extracted = await aiService.extractSkills(resume_text);
+    const dynamicName = aiService.extractCandidateNameFromText(resume_text) || (req.file ? req.file.originalname.replace(/\.[^/.]+$/, '') : '');
 
     const emailMatch = resume_text.match(/[\w.-]+@[\w.-]+\.\w+/);
     const phoneMatch = resume_text.match(/\+?\d[\d\s\-\(\)]{8,}\d/);
     const linkedinMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[\w\-]+/i);
     const githubMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[\w\-]+/i);
 
+    const parsedCandidateName = (extracted.candidate_name && extracted.candidate_name !== 'Candidate Profile' && extracted.candidate_name !== 'Sameer Ahmed')
+      ? extracted.candidate_name
+      : (dynamicName || 'Candidate Profile');
+
     const result = {
       success: true,
-      candidate_name: extracted.candidate_name || '',
+      candidate_name: parsedCandidateName,
       email: emailMatch ? emailMatch[0] : '',
       phone: phoneMatch ? phoneMatch[0] : '',
       location: extracted.location || '',
@@ -179,7 +184,8 @@ router.post('/', handleFileUploadMiddleware, async (req, res) => {
     }
 
     const extracted = await aiService.extractSkills(resume_text);
-    candidate_name = candidate_name || extracted.candidate_name || 'Sameer Ahmed';
+    const dynamicName = aiService.extractCandidateNameFromText(resume_text);
+    candidate_name = candidate_name || (extracted.candidate_name && extracted.candidate_name !== 'Sameer Ahmed' && extracted.candidate_name !== 'Candidate Profile' ? extracted.candidate_name : dynamicName) || 'Candidate Profile';
 
     const prefixToCheck = resume_text.substring(0, 100);
     const existingDuplicate = await queryOne(`

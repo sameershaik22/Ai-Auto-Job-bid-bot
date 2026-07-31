@@ -70,13 +70,13 @@ export default class GenericPlugin extends BasePlugin {
     const placeholder = (field.placeholder || '').toLowerCase();
     const combined = `${label} ${name} ${placeholder}`;
 
-    const candName = candidate.candidate_name || candidate.name || 'Sameer Ahmed';
-    const email = candidate.email || 'sameer@example.com';
-    const phone = candidate.phone || '+1 555 123 4567';
-    const location = candidate.location || 'New York, NY';
-    const linkedin = candidate.linkedin_url || 'https://linkedin.com/in/sameershaik';
-    const github = candidate.github_url || 'https://github.com/sameershaik';
-    const portfolio = candidate.portfolio_url || 'https://sameer.dev';
+    const candName = candidate.candidate_name || candidate.name || 'Candidate Profile';
+    const email = candidate.email || '';
+    const phone = candidate.phone || '';
+    const location = candidate.location || '';
+    const linkedin = candidate.linkedin_url || '';
+    const github = candidate.github_url || '';
+    const portfolio = candidate.portfolio_url || '';
     const salary = candidate.preferred_salary || '$120,000 - $140,000';
     const notice = candidate.notice_period || 'Immediately available';
     const visa = candidate.visa_status || 'Authorized to work';

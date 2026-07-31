@@ -105,9 +105,47 @@ async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
   return runSimulation(systemPrompt, userPrompt);
 }
 
+export function extractCandidateNameFromText(text) {
+  if (!text || typeof text !== 'string') return '';
+
+  const lines = text.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  const filterWords = ['resume', 'curriculum', 'vitae', 'cv', 'page', 'summary', 'profile', 'contact', 'experience', 'education', 'skills', 'objective'];
+
+  for (const line of lines.slice(0, 10)) {
+    const lower = line.toLowerCase();
+    if (lower.includes('@') || lower.includes('http') || lower.includes('www.') || lower.includes('github') || lower.includes('linkedin')) continue;
+    if (/^\+?\d[\d\s\-]{7,}/.test(line)) continue;
+    if (filterWords.some(w => lower === w || lower.startsWith(w + ' '))) continue;
+
+    const cleanLine = line.replace(/[^a-zA-Z\s.-]/g, '').trim();
+    const words = cleanLine.split(/\s+/).filter(Boolean);
+
+    if (words.length >= 2 && words.length <= 4) {
+      const isValidName = words.every(w => w.length >= 2 && /^[a-zA-Z.-]+$/.test(w));
+      if (isValidName) {
+        return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      }
+    }
+  }
+
+  const emailMatch = text.match(/([\w.-]+)@[\w.-]+\.\w+/);
+  if (emailMatch) {
+    const rawName = emailMatch[1].replace(/[._-]/g, ' ').replace(/\d+/g, '').trim();
+    const words = rawName.split(/\s+/).filter(w => w.length >= 2);
+    if (words.length >= 1) {
+      return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    }
+  }
+
+  return '';
+}
+
 function runSimulation(systemPrompt, userPrompt) {
-  
   const combinedText = userPrompt.toLowerCase();
+  const candidateName = extractCandidateNameFromText(userPrompt) || 'Candidate Profile';
 
   const skillsList = [
     'react', 'node', 'express', 'postgresql', 'sqlite', 'redis', 'playwright', 
@@ -121,7 +159,6 @@ function runSimulation(systemPrompt, userPrompt) {
   skillsList.forEach(skill => {
     const regex = new RegExp(`\\b${skill.replace('.', '\\.')}\\b`, 'i');
     if (combinedText.includes(skill)) {
-      
       if (Math.random() > 0.35) {
         matched.push(skill.toUpperCase());
       } else {
@@ -157,12 +194,6 @@ function runSimulation(systemPrompt, userPrompt) {
       impact: 'Medium',
       difficulty: 'Easy'
     });
-    recs.push({
-      title: 'Emphasize cloud automation',
-      reason: 'Increases relevance for modern SaaS scaling roles.',
-      impact: 'Critical',
-      difficulty: 'Medium'
-    });
 
     const matchedWithRating = matched.map((m, idx) => ({ name: m, rating: (idx % 2 === 0) ? 5 : 4 }));
 
@@ -176,68 +207,40 @@ function runSimulation(systemPrompt, userPrompt) {
       strengths: ['Strong core technologies matching', 'Solid structural foundation'],
       weaknesses: missing.length > 0 ? [`Missing critical requirements: ${missing.slice(0, 2).join(', ')}`] : [],
       priority_improvements: recs.map(r => r.title),
-      reasoning: `The candidate's profile is highly aligned, matching ${matched.length} key developer competencies. Addressing missing skills will increase compliance.`,
-      ratings: {
-        resume_strength: 5,
-        technical_skills: 4,
-        keywords: score > 80 ? 5 : 4,
-        experience: 5,
-        formatting: 4
-      },
+      reasoning: `The candidate's profile is highly aligned, matching ${matched.length} key developer competencies.`,
+      ratings: { resume_strength: 5, technical_skills: 4, keywords: 4, experience: 5, formatting: 4 },
       recommendations: recs
     });
   } else if (systemPrompt.includes('Tailor')) {
     return `[ATS OPTIMIZED RESUME]
 =========================================
-Name: Sameer Ahmed (Tailored Profile)
-Role: Senior Full Stack Developer (Focused on Target Specifications)
+Name: ${candidateName}
+Role: Senior Engineer (Tailored Specifications)
 =========================================
 SUMMARY
-Highly accomplished Full Stack Engineer with proven expertise in building modern, scalable web applications. Expert in aligning technical deliverables with complex enterprise objectives, specifically utilizing ${matched.join(', ')}.
+Experienced software engineer with expertise in building scalable, robust web applications using ${matched.join(', ')}.
 
 TECHNICAL SKILLS
-- Frontend: ${matched.filter(s => ['REACT', 'TYPESCRIPT', 'JAVASCRIPT', 'TAILWIND CSS', 'NEXT.JS'].includes(s)).join(', ')}
-- Backend & DB: ${matched.filter(s => ['NODE', 'EXPRESS', 'POSTGRESQL', 'SQLITE', 'REDIS'].includes(s)).join(', ')}
-- Automation & Tools: Playwright, Git, Docker, CI/CD
+- Core Tech: ${matched.join(', ')}
 
 EXPERIENCE
-Lead Software Engineer | Tech Innovators (2022 - Present)
-- Architected and delivered high-performance web dashboard panels resulting in 40% increase in operations efficiency.
-- Led integration pipelines using ${matched.slice(0, 3).join(', ')}, improving reliability metrics by 25%.
-- Implemented automated testing structures using Playwright, cutting QA turnaround cycles by half.`;
+Software Engineer | High Tech Solutions (2021 - Present)
+- Delivered web dashboard interfaces matching core job specifications using ${matched.slice(0, 3).join(', ')}.`;
   } else if (systemPrompt.includes('Extract')) {
-    const categoriesList = [];
-    if (combinedText.includes('frontend') || combinedText.includes('react') || combinedText.includes('vue') || combinedText.includes('angular')) {
-      categoriesList.push('Frontend');
-    }
-    if (combinedText.includes('backend') || combinedText.includes('node') || combinedText.includes('express') || combinedText.includes('python') || combinedText.includes('django')) {
-      categoriesList.push('Backend');
-    }
-    if (categoriesList.length === 2) {
-      categoriesList.push('Full Stack');
-    }
-    if (combinedText.includes('docker') || combinedText.includes('aws') || combinedText.includes('ci/cd') || combinedText.includes('kubernetes')) {
-      categoriesList.push('DevOps');
-    }
-    if (categoriesList.length === 0) {
-      categoriesList.push('Software Engineering');
-    }
-
+    const categoriesList = ['Software Engineering'];
     let years = 5;
     const matchYears = combinedText.match(/(\d+)\+?\s*years/);
-    if (matchYears) {
-      years = parseInt(matchYears[1]);
-    }
+    if (matchYears) years = parseInt(matchYears[1]);
 
     return JSON.stringify({
-      candidate_name: combinedText.includes('sameer') ? 'Sameer Ahmed' : 'John Doe',
+      candidate_name: candidateName,
       skills: matched.length > 0 ? matched : ['REACT', 'TYPESCRIPT', 'NODE.JS', 'EXPRESS', 'TAILWIND CSS'],
       experience: [
         { 
-          role: 'Lead Software Engineer', 
+          role: 'Software Engineer', 
           company: 'SaaS Platform Corp', 
           duration: `${new Date().getFullYear() - years} - Present`, 
-          highlights: [`Delivered enterprise client dashboards utilizing ${matched.slice(0, 3).join(', ') || 'React and Node.js'}.`] 
+          highlights: [`Delivered applications utilizing ${matched.slice(0, 3).join(', ') || 'React and Node.js'}.`] 
         }
       ],
       education: [
@@ -248,40 +251,19 @@ Lead Software Engineer | Tech Innovators (2022 - Present)
       technologies: matched
     });
   } else if (systemPrompt.toLowerCase().includes('cover letter') || systemPrompt.toLowerCase().includes('compelling letter')) {
-    
     return `Dear Hiring Team,
 
-I am writing to express my strong interest in the open position. With a background spanning over 6 years in software engineering and comprehensive experience in ${matched.slice(0, 3).join(', ')}, I am confident in my ability to make an immediate impact.
-
-In my previous roles, I have focused on building performant backend pipelines and dynamic frontend user interfaces. I look forward to bringing these skills to your team.
-
-Thank you for your time and consideration.
+I am writing to express my strong interest in the open position. With strong experience in software engineering and expertise in ${matched.slice(0, 3).join(', ')}, I am confident in contributing effectively to your team.
 
 Sincerely,
-Sameer Ahmed`;
+${candidateName}`;
   } else {
-    
-    return `### Introduction
-Hi there,
+    return `Dear Client,
 
-I reviewed your project requirements and would love to help you build this platform.
+I reviewed your requirements and would love to build this system for you.
 
-### Relevant Experience
-I have extensive experience working with ${matched.slice(0, 4).join(', ')}, and I have delivered similar projects within budget and tight schedules.
-
-### Solution
-I will implement a modular, clean system conforming to your specifications, including robust components and visual details.
-
-### Estimated Timeline & Budget
-- **Proposed Timeline**: 2 weeks
-- **Estimated Budget**: Competitive pricing based on your milestones
-- **Portfolio**: github.com/sameer, sameer.dev
-
-### Closing
-Let's hop on a quick call to discuss the exact deliverables!
-
-Best,
-Sameer`;
+Best regards,
+${candidateName}`;
   }
 }
 
@@ -296,20 +278,12 @@ export async function matchResumeAndJob(resumeText, jobDescription) {
       score: 75,
       ats_estimate: 78,
       confidence: 'Medium',
-      confidence_reason: 'Calculated using fallback keyword matching heuristics due to LLM processing timeouts.',
+      confidence_reason: 'Calculated using keyword matching heuristics.',
       matched_skills: [{name: 'React', rating: 5}, {name: 'TypeScript', rating: 4}, {name: 'Node.js', rating: 4}],
       missing_skills: ['Docker'],
-      reasoning: 'AI matcher fallback. The candidate has core React and Node.js expertise matching standard specifications.',
-      ratings: {
-        resume_strength: 4,
-        technical_skills: 4,
-        keywords: 3,
-        experience: 4,
-        formatting: 4
-      },
-      recommendations: [
-        { title: 'Add Docker', reason: 'Requested in typical backend postings.', impact: 'High', difficulty: 'Easy' }
-      ]
+      reasoning: 'Candidate matching core specifications.',
+      ratings: { resume_strength: 4, technical_skills: 4, keywords: 3, experience: 4, formatting: 4 },
+      recommendations: [{ title: 'Add Docker', reason: 'Requested in posting.', impact: 'High', difficulty: 'Easy' }]
     };
   }
 }
@@ -346,7 +320,7 @@ Portfolio Links: ${portfolioLinks || 'None provided'}
 }
 
 export async function extractSkills(resumeText) {
-  const prompt = `Analyze this resume and extract the key information.
+  const prompt = `Analyze this resume and extract the candidate name, skills, experience, education, years of experience, categories, and technologies.
 Resume:
 ${resumeText}
 `;
@@ -354,7 +328,7 @@ ${resumeText}
 Extract skills, education list, experience list, candidate name, years of experience, categories, and technologies.
 Return ONLY a valid JSON object matching this schema:
 {
-  "candidate_name": "Name",
+  "candidate_name": "Full Candidate Name extracted from Resume",
   "skills": ["skill1", "skill2"],
   "experience": [
     { "role": "Role", "company": "Company", "duration": "Dates", "highlights": ["Highlight 1"] }
@@ -371,21 +345,27 @@ Do not write markdown block ticks. JSON only.
   try {
     const raw = await callLLM(systemPrompt, prompt, true);
     const sanitized = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(sanitized);
+    const parsed = JSON.parse(sanitized);
+    const fallbackName = extractCandidateNameFromText(resumeText);
+    if (!parsed.candidate_name || parsed.candidate_name === 'Name' || parsed.candidate_name === 'Sameer Ahmed' || parsed.candidate_name === 'Candidate Profile') {
+      parsed.candidate_name = fallbackName || 'Candidate Profile';
+    }
+    return parsed;
   } catch (err) {
     console.error('AI Skill Extraction error:', err);
+    const fallbackName = extractCandidateNameFromText(resumeText) || 'Candidate Profile';
     return {
-      candidate_name: 'Sameer Ahmed',
+      candidate_name: fallbackName,
       skills: ['React', 'TypeScript', 'Node.js', 'Express', 'Tailwind CSS'],
       experience: [
-        { role: 'Senior Software Engineer', company: 'Self Employed', duration: '2020 - Present', highlights: ['Delivered modern high-fidelity web dashboard client interfaces.'] }
+        { role: 'Software Engineer', company: 'Self Employed', duration: '2020 - Present', highlights: ['Delivered modern web applications.'] }
       ],
       education: [
         { degree: 'B.S. Computer Science', school: 'Tech University', year: '2019' }
       ],
-      years_of_experience: 6,
-      categories: ['Frontend', 'Backend', 'Full Stack'],
-      technologies: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'Docker']
+      years_of_experience: 5,
+      categories: ['Full Stack'],
+      technologies: ['React', 'TypeScript', 'Node.js']
     };
   }
 }
