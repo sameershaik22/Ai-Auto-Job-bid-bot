@@ -91,6 +91,18 @@ export async function queryOne(sql, params = []) {
 
 async function runMigrations() {
   const resumeColumns = [
+    { name: 'email', type: 'VARCHAR(255)' },
+    { name: 'phone', type: 'VARCHAR(50)' },
+    { name: 'location', type: 'VARCHAR(255)' },
+    { name: 'linkedin_url', type: 'VARCHAR(255)' },
+    { name: 'portfolio_url', type: 'VARCHAR(255)' },
+    { name: 'github_url', type: 'VARCHAR(255)' },
+    { name: 'preferred_salary', type: 'VARCHAR(100)' },
+    { name: 'notice_period', type: 'VARCHAR(100)' },
+    { name: 'visa_status', type: 'VARCHAR(100)' },
+    { name: 'languages', type: 'TEXT' },
+    { name: 'certifications', type: 'TEXT' },
+    { name: 'projects', type: 'TEXT' },
     { name: 'years_of_experience', type: 'INT DEFAULT 0' },
     { name: 'categories', type: 'TEXT' },
     { name: 'technologies', type: 'TEXT' },
@@ -99,6 +111,8 @@ async function runMigrations() {
   ];
 
   const jobColumns = [
+    { name: 'employment_type', type: 'VARCHAR(100)' },
+    { name: 'ats_platform', type: "VARCHAR(100) DEFAULT 'generic'" },
     { name: 'match_score', type: 'INT DEFAULT 0' },
     { name: 'recommended_resume_id', type: 'VARCHAR(50)' },
     { name: 'recommended_resume_name', type: 'VARCHAR(255)' },
@@ -110,6 +124,7 @@ async function runMigrations() {
   ];
 
   const applicationColumns = [
+    { name: 'queue_item_id', type: 'VARCHAR(50)' },
     { name: 'original_score', type: 'INT DEFAULT 0' },
     { name: 'ats_score', type: 'INT DEFAULT 0' },
     { name: 'matched_skills', type: 'TEXT' },
