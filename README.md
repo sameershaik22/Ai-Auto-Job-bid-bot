@@ -1,117 +1,127 @@
-# 🤖 AutoBid Bot (AI Job Application Assistant)
+# 🤖 AutoBid Bot - Autonomous AI Job Application Agent
 
-AutoBid Bot is a cutting-edge, end-to-end platform that leverages AI and browser automation to intelligently manage and submit job applications on your behalf. 
-
-Tired of manually filling out hundreds of applications and tailoring your resume each time? AutoBid Bot acts as your personal AI recruiter. It ingests your base resume, matches it against job descriptions, dynamically tailors your resume using Google Gemini 2.0 Flash, and physically drives a Chromium browser to submit the application for you.
+**AutoBid Bot** is an end-to-end, multi-candidate autonomous job application platform. It uses Google Gemini AI and Playwright stealth browser automation to automatically parse resumes, match candidate profiles to target jobs, dynamically tailor resumes & cover letters, and execute full job applications—including answering custom screening questions and submitting forms on job boards.
 
 ---
 
-## Features
+## ✨ Key Features
 
-- ** Secure Authentication**: Full JWT-based login/register flow.
-- ** Resume Vault**: Upload your PDF resumes. The system uses AI to parse out your skills, experience, and education into a structured format.
-- ** Job Board Integration**: Paste job URLs or descriptions. The system scores your resume against the job requirements using an AI matching algorithm.
-- ** AI Resume Tailoring**: Automatically rewrite and tailor your resume and cover letter specifically for the job you are applying to.
-- ** Headless Automation**: Uses Playwright to spin up a browser in stealth mode, fill out forms, upload your tailored resume, and submit the application for you.
-- ** Real-time Dashboard**: Track live automation status, view audit logs, and monitor your application success rates with a sleek, dark-themed UI.
+### 👤 Multi-Candidate Profile Management
+- Store and manage multiple candidate resumes & profiles simultaneously (e.g., *Sameer, Arnav, Olawale, Alok, Craig*).
+- Automatic PDF parsing & AI skill extraction (years of experience, category classification, primary tech stack).
+- Clone, archive, and edit candidate profiles directly in the visual Resume Vault.
+
+### 🎯 Intelligent Job Import & Scraper
+- Import job postings via direct URL or raw text description.
+- Built-in ATS detection engine supporting **Lever, Greenhouse, Ashby, SmartRecruiters, Workday, and Generic Web Forms**.
+- Automated ATS match scoring and detailed missing skill analysis.
+
+### 📝 AI Resume & Cover Letter Tailoring Engine
+- Powered by **Google Gemini API** (`@google/generative-ai`).
+- Generates job-specific tailored resumes optimized for ATS parsers.
+- Crafts customized cover letters tailored to the target role, candidate background, and tone preferences.
+
+### ⚡ Batch Automation Queue Builder
+- Select multiple candidates $\times$ multiple target jobs in the **Queue Builder**.
+- Launch automated batch runs with real-time execution tracking.
+- Live Socket.io streaming of browser logs, step durations, and submission statuses.
+
+### 🕵️ Stealth Playwright Browser Automation
+- Spawns headless/headed Chromium browsers with human-like interactions (randomized typing delay, coordinate clicks).
+- Auto-detects input fields (Name, Email, Phone, LinkedIn, Portfolio, Salary expectations, Experience).
+- **AI Question Answering**: Dynamically answers custom open-ended screening questions using candidate profile context.
+- Automatic tailored resume PDF upload and application submission.
+
+### 📊 Audit Logs & Analytics Dashboard
+- Comprehensive metrics: Total Submissions, Success Rates, Active Queues, and Failures.
+- Activity feed and detailed audit logs per application attempt.
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 ### Frontend
-- **Framework**: React 18 with Vite
-- **Styling**: Tailwind CSS & Lucide Icons
-- **Real-time**: Socket.io-client for live automation logs
+- **Framework**: React 18 + Vite
+- **Styling**: Tailwind CSS + Lucide Icons
+- **Real-Time**: Socket.io-client for live terminal logs & status updates
 
 ### Backend
-- **Framework**: Node.js & Express.js
-- **Database**: PostgreSQL (Neon Serverless DB) & `pg` pool
-- **AI Engine**: Google Gemini API (`@google/genai`)
-- **Automation**: Playwright (`chromium`)
-- **Security**: bcrypt & jsonwebtoken
+- **Framework**: Node.js + Express.js
+- **Database**: SQLite / PostgreSQL with dual database adapters (`sqlite3` / `pg`)
+- **AI Engine**: Google Gemini API (`@google/generative-ai`)
+- **Automation**: Playwright Chromium (Stealth Browser Runner)
+- **Security**: bcrypt & JWT authentication
 
 ---
 
-## Getting Started
-
-Follow these instructions to get the platform running on your local machine.
+## 🚀 Getting Started
 
 ### 1. Prerequisites
-- **Node.js**: v18 or higher
-- **PostgreSQL**: Local database or a cloud database like Neon.
-- **Gemini API Key**: Obtain a free key from Google AI Studio.
+- **Node.js**: `v18.x` or higher
+- **Gemini API Key**: Get a key from [Google AI Studio](https://aistudio.google.com/)
 
 ### 2. Installation
 
-Clone the repository and install dependencies for both the frontend and backend.
-
 ```bash
-# Install backend dependencies
-cd backend
+# Clone the repository
+git clone https://github.com/sameershaik22/Ai-Auto-Job-bid-bot.git
+cd Ai-Auto-Job-bid-bot
+
+# Install root dependencies
 npm install
 
-# Install frontend dependencies
-cd ../frontend
-npm install
+# Install backend & frontend dependencies
+cd backend && npm install
+cd ../frontend && npm install
 ```
 
-### 3. Environment Variables
+### 3. Environment Setup
 
-Create a `.env` file in the root directory (or inside the backend folder) and add the following keys:
+Create a `.env` file in the root or `backend/` directory:
 
 ```env
-# Database (PostgreSQL)
-DATABASE_URL="postgresql://user:password@hostname/dbname?sslmode=require"
+# Server Config
+PORT=5000
 
-# AI Service (Google Gemini)
+# AI Service (Google Gemini API)
 GEMINI_API_KEY="your-gemini-api-key"
+
+# Database Configuration (Defaults to SQLite backend/db.sqlite if DATABASE_URL is not set)
+# DATABASE_URL="postgresql://user:password@localhost:5432/autobid"
 
 # Security
 JWT_SECRET="your-super-secret-jwt-key"
 
-# (Optional) Playwright Config
-HEADLESS="false" # Set to 'true' to hide the browser during automation
+# Automation Config
+HEADLESS="false" # Set to 'true' to run Playwright invisibly
 ```
 
-### 4. Database Setup
+### 4. Running the Application
 
-The backend handles database migrations automatically on startup! Just ensure your `DATABASE_URL` is correct, and the server will initialize the schema (Users, Resumes, Jobs, Applications, Logs) automatically.
+Run both backend and frontend concurrently with a single command from the project root:
 
-### 5. Running the Application
-
-You need to run both the frontend and backend servers.
-
-**Terminal 1 (Backend):**
 ```bash
-cd backend
 npm run dev
-# Server runs on http://localhost:5000
 ```
 
-**Terminal 2 (Frontend):**
-```bash
-cd frontend
-npm run dev
-# App runs on http://localhost:5173
-```
+- **Frontend App**: [http://localhost:5173](http://localhost:5173)
+- **Backend API**: [http://localhost:5000](http://localhost:5000)
 
 ---
 
-##  How to Use
+## 📖 How It Works
 
-1. **Create an Account**: Open `http://localhost:5173` and register a new account.
-2. **Add a Resume**: Go to the **Resumes** tab and ingest your resume. The AI will extract your skills and experience.
-3. **Find a Job**: Go to the **Jobs** tab and add a job you want to apply for.
-4. **Start Automation**: In the **Automation** tab, select your resume and the target job, then click "Run Automation".
-5. **Watch the Magic**: A Chromium browser will spawn on your screen, fill out the application details, upload your resume, and click submit. You can track everything live in the **Logs** tab!
-
----
-
-## Disclaimer
-
-This tool is built for educational and personal use. When using browser automation to apply for jobs on platforms like LinkedIn or Indeed, please ensure you comply with their respective Terms of Service. Be mindful of AI hallucinations when submitting automated cover letters!
+1. **Add Profiles**: Go to the **Profiles** tab, upload candidate resumes (PDFs), and let AI parse skills and experience.
+2. **Import Jobs**: Go to the **Jobs** tab and paste target job links or descriptions.
+3. **Build Queue**: Navigate to **Queue**, select candidate profiles and target jobs, then click **Launch Queue**.
+4. **Autonomous Execution**: Watch the live logs terminal as the bot tailors resumes, writes cover letters, launches stealth Chromium instances, fills application forms, answers questions, and submits applications automatically.
 
 ---
 
-*Built with passion for seamless job hunting.*
+## ⚠️ Disclaimer
+
+This application is created for educational and personal workflow automation purposes. Ensure compliance with the Terms of Service of target job boards when utilizing automated browser tools.
+
+---
+
+*Built with ❤️ for intelligent job search automation.*
