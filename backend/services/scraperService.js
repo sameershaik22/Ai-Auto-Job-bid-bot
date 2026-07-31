@@ -43,27 +43,35 @@ Do not write markdown ticks. JSON only.
 
 async function callScraperLLM(text) {
   if (geminiClient) {
-    const model = geminiClient.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' }
-    });
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: `${SCRAPE_SYSTEM_PROMPT}\n\nPage Text:\n${text}` }] }]
-    });
-    return result.response.text().trim();
+    try {
+      const model = geminiClient.getGenerativeModel({ 
+        model: 'gemini-2.0-flash',
+        generationConfig: { responseMimeType: 'application/json' }
+      });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: `${SCRAPE_SYSTEM_PROMPT}\n\nPage Text:\n${text}` }] }]
+      });
+      return result.response.text().trim();
+    } catch (err) {
+      console.warn(`[Scraper Service] Gemini LLM fallback (${err.message || 'Error'}). Using local heuristic scraper simulation.`);
+    }
   }
   
   if (openaiClient) {
-    const response = await openaiClient.chat.completions.create({
-      model: 'gpt-4o-mini',
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SCRAPE_SYSTEM_PROMPT },
-        { role: 'user', content: text }
-      ],
-      temperature: 0.2
-    });
-    return response.choices[0].message.content.trim();
+    try {
+      const response = await openaiClient.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: SCRAPE_SYSTEM_PROMPT },
+          { role: 'user', content: text }
+        ],
+        temperature: 0.2
+      });
+      return response.choices[0].message.content.trim();
+    } catch (err) {
+      console.warn(`[Scraper Service] OpenAI LLM fallback (${err.message || 'Error'}).`);
+    }
   }
 
   return runScraperSimulation(text);

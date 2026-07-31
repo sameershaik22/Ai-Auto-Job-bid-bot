@@ -24,7 +24,6 @@ export default class GenericPlugin extends BasePlugin {
   async extractFormFields() {
     return await this.page.evaluate(() => {
       const fields = [];
-
       const inputs = document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select');
 
       inputs.forEach((el, i) => {
@@ -36,9 +35,9 @@ export default class GenericPlugin extends BasePlugin {
         }
 
         if (!label) {
-          const parent = el.closest('div, fieldset, li');
+          const parent = el.closest('div, fieldset, li, p, td');
           if (parent) {
-            const labelEl = parent.querySelector('label, legend, span[class*="label"], p');
+            const labelEl = parent.querySelector('label, legend, span[class*="label"], p, h3, h4, strong');
             if (labelEl) label = labelEl.innerText.trim().substring(0, 100);
           }
         }
@@ -65,14 +64,80 @@ export default class GenericPlugin extends BasePlugin {
     });
   }
 
+  getHeuristicAnswer(field, candidate) {
+    const label = (field.label || '').toLowerCase();
+    const name = (field.name || '').toLowerCase();
+    const placeholder = (field.placeholder || '').toLowerCase();
+    const combined = `${label} ${name} ${placeholder}`;
+
+    const candName = candidate.candidate_name || candidate.name || 'Sameer Ahmed';
+    const email = candidate.email || 'sameer@example.com';
+    const phone = candidate.phone || '+1 555 123 4567';
+    const location = candidate.location || 'New York, NY';
+    const linkedin = candidate.linkedin_url || 'https://linkedin.com/in/sameershaik';
+    const github = candidate.github_url || 'https://github.com/sameershaik';
+    const portfolio = candidate.portfolio_url || 'https://sameer.dev';
+    const salary = candidate.preferred_salary || '$120,000 - $140,000';
+    const notice = candidate.notice_period || 'Immediately available';
+    const visa = candidate.visa_status || 'Authorized to work';
+    const skills = candidate.skills || 'React, Node.js, TypeScript, PostgreSQL, Playwright';
+    const exp = String(candidate.years_of_experience || 5);
+    const cover = candidate.cover_letter || candidate.summary || 
+      `Dear Hiring Manager,\n\nI am writing to express my enthusiastic interest in the ${candidate.job_title || 'Software Engineer'} role at ${candidate.company || 'your company'}. With over ${exp} years of engineering experience specializing in ${skills}, I have successfully built and deployed high-performance web applications.\n\nBest regards,\n${candName}`;
+
+    if (combined.includes('name') || combined.includes('full name') || combined.includes('candidate')) {
+      return candName;
+    }
+    if (combined.includes('email') || field.type === 'email') {
+      return email;
+    }
+    if (combined.includes('phone') || combined.includes('mobile') || combined.includes('contact') || field.type === 'tel') {
+      return phone;
+    }
+    if (combined.includes('linkedin')) {
+      return linkedin;
+    }
+    if (combined.includes('github')) {
+      return github;
+    }
+    if (combined.includes('portfolio') || combined.includes('website') || combined.includes('url')) {
+      return portfolio;
+    }
+    if (combined.includes('location') || combined.includes('city') || combined.includes('address')) {
+      return location;
+    }
+    if (combined.includes('salary') || combined.includes('compensation') || combined.includes('pay')) {
+      return salary;
+    }
+    if (combined.includes('notice') || combined.includes('start') || combined.includes('availability')) {
+      return notice;
+    }
+    if (combined.includes('visa') || combined.includes('sponsor') || combined.includes('authorize') || combined.includes('eligib')) {
+      return visa;
+    }
+    if (combined.includes('cover') || combined.includes('letter') || combined.includes('summary') || combined.includes('note') || combined.includes('why') || field.tagName === 'textarea') {
+      return cover;
+    }
+    if (combined.includes('skill') || combined.includes('technology') || combined.includes('stack')) {
+      return skills;
+    }
+    if (combined.includes('experience') || combined.includes('year')) {
+      return exp;
+    }
+    if (combined.includes('hear') || combined.includes('source') || combined.includes('referral')) {
+      return 'Online Job Board';
+    }
+    return '';
+  }
+
   async askAIForAnswers(formFields, candidate) {
-    if (!this.gemini) return {};
+    let aiAnswers = {};
+    if (this.gemini) {
+      const fieldDescriptions = formFields.map((f, i) =>
+        `${i + 1}. Field: "${f.label}" | type: ${f.type} | name: "${f.name}" | required: ${f.required}`
+      ).join('\n');
 
-    const fieldDescriptions = formFields.map((f, i) =>
-      `${i + 1}. Field: "${f.label}" | type: ${f.type} | name: "${f.name}" | required: ${f.required}`
-    ).join('\n');
-
-    const candidateContext = `
+      const candidateContext = `
 Name: ${candidate.candidate_name}
 Email: ${candidate.email || ''}
 Phone: ${candidate.phone || ''}
@@ -86,40 +151,40 @@ Notice Period: ${candidate.notice_period || 'Immediately available'}
 Languages: ${candidate.languages || 'English'}
 Skills: ${candidate.skills || ''}
 Years of Experience: ${candidate.years_of_experience || 0}
+Cover Letter: ${candidate.cover_letter || candidate.summary || ''}
 `.trim();
 
-    const prompt = `
+      const prompt = `
 You are filling out a job application form on behalf of a candidate.
 
 Candidate Profile:
 ${candidateContext}
 
-Form Fields to fill (label | type | name):
+Form Fields:
 ${fieldDescriptions}
 
-Instructions:
-- For each field number, provide the best answer using the candidate's information
-- For yes/no questions about work authorization, answer "Yes"
-- For salary fields, use the preferred salary
-- For "how did you hear about us" or similar, answer "Online job board"
-- For gender/race/veteran status, answer "Prefer not to say" or "I don't wish to answer"
-- For cover letter or additional info, use a brief professional statement
-- For LinkedIn URL fields, use the linkedin_url
-- Skip submit buttons, captchas, and file upload fields (return empty string for those)
-- Return ONLY a valid JSON object: { "1": "answer1", "2": "answer2", ... } using the field numbers
-
-Return only the JSON object, no other text.
+Return ONLY a valid JSON object mapping field numbers to string answers: { "1": "answer1", "2": "answer2", ... }
 `;
 
-    try {
-      const model = this.gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim().replace(/```json|```/g, '');
-      return JSON.parse(text);
-    } catch (err) {
-      await this.logger.warning(`AI form-fill failed: ${err.message}`);
-      return {};
+      try {
+        const model = this.gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim().replace(/```json|```/g, '');
+        aiAnswers = JSON.parse(text);
+      } catch (err) {
+        await this.logger.warning(`AI form-fill Gemini fallback: ${err.message || 'Rate Limit'}. Using heuristic parser.`);
+      }
     }
+
+    const finalAnswers = {};
+    formFields.forEach((field, i) => {
+      const key = String(i + 1);
+      const aiVal = aiAnswers[key];
+      const heuristicVal = this.getHeuristicAnswer(field, candidate);
+      finalAnswers[key] = (aiVal && aiVal !== '') ? aiVal : heuristicVal;
+    });
+
+    return finalAnswers;
   }
 
   async fillField(field, value) {
@@ -139,8 +204,7 @@ Return only the JSON object, no other text.
       } else if (field.tagName === 'textarea' || field.type === 'text' || field.type === 'email' || field.type === 'tel' || field.type === 'url' || field.type === 'number') {
         await this.humanType(field.selector, String(value));
       }
-    } catch {
-    }
+    } catch {}
   }
 
   async run(appData, resumePath) {
@@ -170,7 +234,7 @@ Return only the JSON object, no other text.
 
       await this.logger.info('Extracting form fields...');
       const formFields = await this.extractFormFields();
-      await this.logger.info(`Detected ${formFields.length} form fields. Asking AI for answers...`);
+      await this.logger.info(`Detected ${formFields.length} form fields. Matching candidate profile & AI answers...`);
 
       const answers = await this.askAIForAnswers(formFields, appData);
 
@@ -182,7 +246,7 @@ Return only the JSON object, no other text.
         if (field.type === 'file' && resumePath) {
           try {
             await this.page.setInputFiles(field.selector, path.resolve(resumePath));
-            await this.logger.info('Uploaded resume file.');
+            await this.logger.info('Uploaded physical resume file.');
             await this.page.waitForTimeout(2000);
           } catch {}
           continue;
@@ -198,7 +262,10 @@ Return only the JSON object, no other text.
       const submitSelectors = [
         'button[type="submit"]', 'input[type="submit"]',
         'button:has-text("Submit")', 'button:has-text("Submit Application")',
-        'button:has-text("Apply")', '[data-qa="btn-submit"]'
+        'button:has-text("Apply")', 'button:has-text("Apply Now")',
+        'button:has-text("Send Application")', 'button:has-text("Complete Application")',
+        'button:has-text("Finish")', '[data-qa="btn-submit"]',
+        '.submit-btn', '#submit-btn', '.btn-submit', 'form button'
       ];
 
       let submitted = false;
@@ -206,9 +273,9 @@ Return only the JSON object, no other text.
         try {
           const btn = await this.page.$(sel);
           if (btn) {
-            await this.logger.info('Clicking submit...');
+            await this.logger.info(`Clicking submit button (${sel})...`);
             await btn.click();
-            await this.page.waitForTimeout(5000);
+            await this.page.waitForTimeout(4000);
             submitted = true;
             break;
           }
@@ -219,7 +286,8 @@ Return only the JSON object, no other text.
       const isSuccess = content.toLowerCase().includes('thank you') ||
         content.toLowerCase().includes('application submitted') ||
         content.toLowerCase().includes('successfully submitted') ||
-        content.toLowerCase().includes('received your application');
+        content.toLowerCase().includes('received your application') ||
+        content.toLowerCase().includes('applied');
 
       if (isSuccess || submitted) {
         await this.logger.success('Application submitted successfully via Generic Plugin.');

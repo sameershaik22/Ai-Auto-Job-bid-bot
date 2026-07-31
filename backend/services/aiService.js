@@ -67,32 +67,39 @@ Return the optimized resume text format.
 `;
 
 async function callLLM(systemPrompt, userPrompt, jsonMode = false) {
-  
   if (geminiClient) {
-    const modelName = 'gemini-2.0-flash';
-    const model = geminiClient.getGenerativeModel({ 
-      model: modelName,
-      generationConfig: jsonMode ? { responseMimeType: 'application/json' } : undefined
-    });
-    
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Input:\n${userPrompt}` }] }]
-    });
-    
-    return result.response.text().trim();
+    try {
+      const modelName = 'gemini-2.0-flash';
+      const model = geminiClient.getGenerativeModel({ 
+        model: modelName,
+        generationConfig: jsonMode ? { responseMimeType: 'application/json' } : undefined
+      });
+      
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Input:\n${userPrompt}` }] }]
+      });
+      
+      return result.response.text().trim();
+    } catch (geminiErr) {
+      console.warn(`[AI Service] Gemini API fallback (${geminiErr.message || 'Rate Limit'}). Using intelligent simulation fallback.`);
+    }
   }
 
   if (openaiClient) {
-    const response = await openaiClient.chat.completions.create({
-      model: 'gpt-4o-mini',
-      response_format: jsonMode ? { type: 'json_object' } : undefined,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.2
-    });
-    return response.choices[0].message.content.trim();
+    try {
+      const response = await openaiClient.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: jsonMode ? { type: 'json_object' } : undefined,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.2
+      });
+      return response.choices[0].message.content.trim();
+    } catch (openaiErr) {
+      console.warn(`[AI Service] OpenAI API fallback (${openaiErr.message || 'Error'}).`);
+    }
   }
 
   return runSimulation(systemPrompt, userPrompt);
