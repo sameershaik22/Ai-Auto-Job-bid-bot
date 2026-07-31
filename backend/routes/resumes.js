@@ -113,10 +113,25 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
     const extracted = await aiService.extractSkills(resume_text);
     const dynamicName = aiService.extractCandidateNameFromText(resume_text) || (req.file ? req.file.originalname.replace(/\.[^/.]+$/, '') : '');
 
-    const emailMatch = resume_text.match(/[\w.-]+@[\w.-]+\.\w+/);
-    const phoneMatch = resume_text.match(/\+?\d[\d\s\-\(\)]{8,}\d/);
-    const linkedinMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[\w\-]+/i);
-    const githubMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[\w\-]+/i);
+    const emailMatch = resume_text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    
+    const phoneMatch = resume_text.match(/(?:\+?\d{1,3}[\s.-]?)?\(?\d{3,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}/);
+    let cleanPhone = phoneMatch ? phoneMatch[0].trim() : '';
+    if (cleanPhone && (cleanPhone.includes('201') || cleanPhone.includes('202')) && cleanPhone.includes('-')) {
+      cleanPhone = '';
+    }
+
+    const locationMatch = resume_text.match(/(?:Location|Address|City|Based in|Lives in):\s*([A-Za-z0-9\s,.-]{3,35})/i) ||
+      resume_text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2,}\b|\bHyderabad\b|\bBangalore\b|\bDelhi\b|\bMumbai\b|\bSan Francisco\b|\bNew York\b|\bLondon\b)/i);
+
+    const linkedinMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9%_-]+/i);
+    const githubMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9%_-]+/i);
+    
+    const portfolioMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9-]+\.(?:dev|io|me|com|co|net|org)\/?[a-zA-Z0-9%_-]*/i);
+    let portfolioUrl = '';
+    if (portfolioMatch && !portfolioMatch[0].includes('linkedin') && !portfolioMatch[0].includes('github')) {
+      portfolioUrl = portfolioMatch[0].startsWith('http') ? portfolioMatch[0] : `https://${portfolioMatch[0]}`;
+    }
 
     const parsedCandidateName = (extracted.candidate_name && extracted.candidate_name !== 'Candidate Profile' && extracted.candidate_name !== 'Sameer Ahmed')
       ? extracted.candidate_name
@@ -139,11 +154,12 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
       name: profileTitle,
       candidate_name: parsedCandidateName,
       target_role: detectedRole,
-      email: emailMatch ? emailMatch[0] : '',
-      phone: phoneMatch ? phoneMatch[0] : '',
-      location: extracted.location || '',
-      linkedin_url: linkedinMatch ? (linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`) : '',
-      github_url: githubMatch ? (githubMatch[0].startsWith('http') ? githubMatch[0] : `https://${githubMatch[0]}`) : '',
+      email: emailMatch ? emailMatch[0] : (extracted.email || ''),
+      phone: cleanPhone || extracted.phone || '',
+      location: extracted.location || (locationMatch ? (locationMatch[1] || locationMatch[0]).trim() : ''),
+      linkedin_url: linkedinMatch ? (linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`) : (extracted.linkedin_url || ''),
+      github_url: githubMatch ? (githubMatch[0].startsWith('http') ? githubMatch[0] : `https://${githubMatch[0]}`) : (extracted.github_url || ''),
+      portfolio_url: portfolioUrl || extracted.portfolio_url || '',
       skills: Array.isArray(extracted.skills) ? extracted.skills.join(', ') : (extracted.skills || ''),
       summary: extracted.summary || '',
       years_of_experience: extracted.years_of_experience || 0,
