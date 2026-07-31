@@ -102,6 +102,7 @@ export default function CandidateProfiles() {
       setUploadStep('parsed');
       setForm(prev => ({
         ...prev,
+        name: data.name || prev.name || file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '),
         candidate_name: prev.candidate_name || data.candidate_name || file.name.replace(/\.[^/.]+$/, ''),
         email: data.email || prev.email || '',
         phone: data.phone || prev.phone || '',
