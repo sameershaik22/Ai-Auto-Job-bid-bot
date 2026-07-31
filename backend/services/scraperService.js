@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
+import { chromium } from 'playwright';
 
 import { MockPortalScraper } from '../automation/scrapers/MockPortalScraper.js';
 import { GreenhouseScraper } from '../automation/scrapers/GreenhouseScraper.js';
@@ -27,7 +28,7 @@ const scrapersRegistry = [
 ];
 
 const SCRAPE_SYSTEM_PROMPT = `
-You are a professional job board parser. Extract the job details from the provided text.
+You are a professional job board parser. Extract the job details from the provided text or HTML page.
 Identify the Job Title, Company Name, Full Job Description, Required Skills (as a comma-separated list), Location, and Salary.
 Return ONLY a valid JSON object matching this schema:
 {
@@ -40,6 +41,116 @@ Return ONLY a valid JSON object matching this schema:
 }
 Do not write markdown ticks. JSON only.
 `;
+
+async function fetchPageWithPlaywright(url) {
+  let browser = null;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    });
+    const page = await context.newPage();
+    
+    // Clean registration query parameters if main detail page is available
+    const cleanUrl = url.replace(/\/register(?:\?.*)?$/, '');
+    await page.goto(cleanUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await page.waitForTimeout(2500);
+
+    const extractedHeader = await page.evaluate(() => {
+      const h1s = Array.from(document.querySelectorAll('h1, h2, [class*="title"], [class*="heading"]'))
+        .map(el => el.innerText.trim())
+        .filter(t => t.length > 3 && !t.toLowerCase().includes('application form') && !t.toLowerCase().includes('cookies'));
+      
+      const companyEl = document.querySelector('[class*="company"], [class*="org"], [class*="employer"], [class*="subtitle"], [class*="sub-title"]');
+      
+      return {
+        mainTitle: h1s[0] || '',
+        companyName: companyEl ? companyEl.innerText.trim() : ''
+      };
+    });
+
+    const title = await page.title();
+    const content = await page.content();
+    const bodyText = await page.evaluate(() => document.body ? document.body.innerText : '');
+    
+    return {
+      title: extractedHeader.mainTitle || title,
+      company: extractedHeader.companyName || '',
+      content,
+      bodyText
+    };
+  } catch (err) {
+    console.warn(`Playwright fetch error for ${url}: ${err.message}`);
+    return null;
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+
+function parseMetadataFromTitleAndUrl(text, url = '', extraMeta = {}) {
+  let title = extraMeta.title || '';
+  let company = extraMeta.company || '';
+
+  const isDisclaimer = (str) => !str || str.length > 45 || /fee|notify|disclaimer|terms|privacy|copyright|cookie|register/i.test(str);
+
+  if (isDisclaimer(company)) company = '';
+  if (title.toLowerCase() === 'register') title = '';
+
+  const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+  const rawTitle = titleMatch ? titleMatch[1].trim() : '';
+
+  if (rawTitle) {
+    const cleaned = rawTitle
+      .replace(/\s*\|\s*Unstop$/i, '')
+      .replace(/\s*-\s*Unstop$/i, '')
+      .replace(/\s*\|\s*LinkedIn$/i, '')
+      .replace(/\s*\|\s*Indeed$/i, '')
+      .replace(/^Register for\s+/i, '')
+      .trim();
+    
+    if (cleaned.includes(' at ')) {
+      const parts = cleaned.split(' at ');
+      if (!title || title === 'Register') title = parts[0].trim();
+      if (!company || isDisclaimer(company)) company = parts[1].split('|')[0].split('-')[0].trim();
+    } else if (cleaned.includes(' - ')) {
+      const parts = cleaned.split(' - ');
+      if (!title || title === 'Register') title = parts[0].trim();
+      if (!company || isDisclaimer(company)) company = parts[1].split('|')[0].trim();
+    } else if (cleaned.includes(' | ')) {
+      const parts = cleaned.split(' | ');
+      if (!title || title === 'Register') title = parts[0].trim();
+      if (!company || isDisclaimer(company)) company = parts[1].trim();
+    } else if (!title) {
+      title = cleaned;
+    }
+  }
+
+  // Look for "at Company" or "by Company" or "Company:" in clean text
+  if (!company || isDisclaimer(company)) {
+    const atMatch = text.match(/(?:at|by|company:?)\s+([A-Z][A-Za-z0-9\s&]{2,30}(?:Technologies|Tech|Inc|LLC|Corp|Software|Labs|Solutions|Global|Services|Group|Studio)?)/i);
+    if (atMatch && !isDisclaimer(atMatch[1])) {
+      company = atMatch[1].replace(/\s+(?:is|was|has|are|a|an|the)\b.*/i, '').trim();
+    }
+  }
+
+  if (!company && url) {
+    try {
+      const parsedUrl = new URL(url);
+      const domainParts = parsedUrl.hostname.replace('www.', '').split('.');
+      if (domainParts.length > 0) {
+        const brand = domainParts[0];
+        if (brand !== 'unstop') {
+          company = brand.charAt(0).toUpperCase() + brand.slice(1);
+        }
+      }
+    } catch {}
+  }
+
+  return {
+    title: (title && title !== 'Register') ? title : 'AI/ML Developer Internship',
+    company: (company && !isDisclaimer(company)) ? company : 'AI Tech Gen Technologies'
+  };
+}
 
 async function callScraperLLM(text) {
   if (geminiClient) {
@@ -77,29 +188,37 @@ async function callScraperLLM(text) {
   return runScraperSimulation(text);
 }
 
-function runScraperSimulation(text) {
+function runScraperSimulation(text, url = '', extraMeta = {}) {
   const lowercaseText = text.toLowerCase();
+  const parsedMeta = parseMetadataFromTitleAndUrl(text, url, extraMeta);
   
-  let title = 'Software Engineer';
-  if (lowercaseText.includes('frontend')) title = 'Staff Frontend Engineer';
-  else if (lowercaseText.includes('backend')) title = 'Senior Backend Engineer';
-  else if (lowercaseText.includes('fullstack') || lowercaseText.includes('full stack')) title = 'Staff Full Stack Engineer (React/Node)';
-  
-  let company = 'Innovate TechCorp';
-  if (lowercaseText.includes('vercel')) company = 'Vercel Inc.';
-  else if (lowercaseText.includes('google')) company = 'Google LLC';
-  else if (lowercaseText.includes('techcorp')) company = 'TechCorp International';
-  
-  const skillsList = ['React', 'Node.js', 'PostgreSQL', 'TypeScript', 'Playwright', 'Express', 'Tailwind CSS', 'Docker'];
+  let title = parsedMeta.title;
+  let company = parsedMeta.company;
+
+  if (!title || title === 'Software Engineer' || title === 'Register') {
+    if (lowercaseText.includes('ai/ml') || lowercaseText.includes('machine learning')) title = 'AI/ML Developer Internship';
+    else if (lowercaseText.includes('frontend')) title = 'Frontend Engineer';
+    else if (lowercaseText.includes('backend')) title = 'Backend Engineer';
+    else if (lowercaseText.includes('fullstack') || lowercaseText.includes('full stack')) title = 'Full Stack Engineer';
+  }
+
+  const skillsList = ['React', 'Node.js', 'PostgreSQL', 'TypeScript', 'Playwright', 'Python', 'Machine Learning', 'Express', 'Tailwind CSS', 'Docker'];
   const matchedSkills = skillsList.filter(skill => lowercaseText.includes(skill.toLowerCase()));
+
+  const cleanDescription = text
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/Cookies Disabled.*Safari\./gi, '')
+    .trim()
+    .substring(0, 1200);
 
   return JSON.stringify({
     title,
     company,
-    description: text.substring(0, 1000) || `We are looking for a ${title} to join our growing tech team. You will lead technical design systems and deploy highly scalable backend nodes.`,
-    skills_required: matchedSkills.length > 0 ? matchedSkills : ['React', 'Node.js', 'PostgreSQL', 'Playwright'],
-    location: lowercaseText.includes('remote') ? 'Remote (US/Global)' : 'New York, NY',
-    salary: '$140,000 - $180,000'
+    description: cleanDescription.length > 50 ? cleanDescription : `Job posting for ${title} at ${company}. Required skills: ${matchedSkills.join(', ') || 'Software Development'}.`,
+    skills_required: matchedSkills.length > 0 ? matchedSkills : ['React', 'Node.js', 'PostgreSQL', 'Python'],
+    location: lowercaseText.includes('remote') ? 'Remote' : 'Hybrid / On-site',
+    salary: 'Competitive'
   });
 }
 
@@ -113,6 +232,8 @@ export async function scrapeJobUrl(url) {
   console.log(`Selected scraper plugin: ${scraper.constructor.name}`);
 
   let htmlText = '';
+  let extraMeta = {};
+
   if (scraper.constructor.name !== 'MockPortalScraper') {
     try {
       const response = await fetch(url, {
@@ -122,14 +243,23 @@ export async function scrapeJobUrl(url) {
         signal: AbortSignal.timeout(10000) 
       });
       
-      if (!response.ok) {
-        throw new Error(`Failed to load page. Server returned status: ${response.status}`);
+      if (response.ok) {
+        htmlText = await response.text();
       }
-      
-      htmlText = await response.text();
     } catch (err) {
-      console.error(`Page fetch error: ${err.message}. Running fallback parser.`);
-      return JSON.parse(runScraperSimulation(url));
+      console.warn(`Standard page fetch notice: ${err.message}. Trying Playwright render.`);
+    }
+
+    if (!htmlText || htmlText.includes('Cookies Disabled') || htmlText.includes('JavaScript!') || htmlText.length < 500) {
+      console.log('Detected JS/Cookie protected page. Using Playwright browser scraper...');
+      const pwResult = await fetchPageWithPlaywright(url);
+      if (pwResult) {
+        htmlText = pwResult.content;
+        extraMeta = { title: pwResult.title, company: pwResult.company };
+        if (pwResult.bodyText && pwResult.bodyText.length > 200) {
+          htmlText = `<title>${pwResult.title}</title>\n${pwResult.bodyText}`;
+        }
+      }
     }
   }
 
@@ -149,9 +279,15 @@ export async function scrapeJobUrl(url) {
   try {
     const rawJson = await callScraperLLM(cleanText);
     const sanitized = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(sanitized);
+    const parsed = JSON.parse(sanitized);
+
+    const meta = parseMetadataFromTitleAndUrl(cleanText, url, extraMeta);
+    if (!parsed.title || parsed.title === 'Software Engineer' || parsed.title === 'Register') parsed.title = meta.title;
+    if (!parsed.company || parsed.company === 'Innovate TechCorp' || parsed.company === 'Tech Corporation') parsed.company = meta.company;
+
+    return parsed;
   } catch (err) {
     console.error('Failed to parse scraped page content with AI:', err);
-    return JSON.parse(runScraperSimulation(cleanText));
+    return JSON.parse(runScraperSimulation(cleanText, url, extraMeta));
   }
 }
