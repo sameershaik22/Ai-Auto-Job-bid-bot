@@ -94,20 +94,28 @@ export default function CandidateProfiles() {
 
     try {
       const res = await fetch('/api/resumes/ingest', { method: 'POST', body: fd });
-      if (!res.ok) throw new Error('Upload failed');
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(errJson.error || 'Upload failed');
+      }
       const data = await res.json();
       setUploadStep('parsed');
       setForm(prev => ({
         ...prev,
-        candidate_name: prev.candidate_name || data.candidate_name || '',
-        skills: data.skills || prev.skills || '',
+        candidate_name: prev.candidate_name || data.candidate_name || file.name.replace(/\.[^/.]+$/, ''),
+        email: data.email || prev.email || '',
+        phone: data.phone || prev.phone || '',
+        location: data.location || prev.location || '',
+        linkedin_url: data.linkedin_url || prev.linkedin_url || '',
+        github_url: data.github_url || prev.github_url || '',
+        skills: typeof data.skills === 'string' ? data.skills : (Array.isArray(data.skills) ? data.skills.join(', ') : (prev.skills || '')),
         summary: data.summary || prev.summary || '',
         years_of_experience: data.years_of_experience || prev.years_of_experience || 0,
         resume_text: data.resume_text || prev.resume_text || '',
       }));
     } catch (err) {
       setUploadStep('error');
-      console.error(err);
+      console.error('Ingest upload error:', err);
     }
   };
 

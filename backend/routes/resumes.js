@@ -15,6 +15,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadPath = path.join(__dirname, '../public/uploads');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
@@ -25,18 +28,35 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const fileExt = path.extname(file.originalname).toLowerCase();
-    if (fileExt === '.pdf' || fileExt === '.docx') {
+    if (fileExt === '.pdf' || fileExt === '.docx' || fileExt === '.txt') {
       cb(null, true);
     } else {
-      cb(new Error('Unsupported file extension. Only PDF and DOCX files are allowed.'));
+      cb(new Error('Unsupported file extension. Only PDF, DOCX, and TXT files are allowed.'));
     }
   }
 });
 
 const router = express.Router();
+
+const handleFileUploadMiddleware = (req, res, next) => {
+  upload.any()(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size limit exceeded. Maximum size allowed is 10MB.' });
+      }
+      return res.status(400).json({ error: `Upload validation error: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (req.files && req.files.length > 0) {
+      req.file = req.files[0];
+    }
+    next();
+  });
+};
 
 router.get('/', async (req, res) => {
   try {
@@ -55,19 +75,68 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', (req, res, next) => {
-  upload.single('file')(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'File size limit exceeded. Maximum size allowed is 5MB.' });
-      }
-      return res.status(400).json({ error: `Upload validation error: ${err.message}` });
-    } else if (err) {
-      return res.status(400).json({ error: err.message });
+router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
+  let tempFilePath = null;
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded.' });
     }
-    next();
-  });
-}, async (req, res) => {
+    tempFilePath = req.file.path;
+    const fileExt = path.extname(req.file.originalname).toLowerCase();
+    let resume_text = '';
+    let resume_pdf = null;
+    let resume_docx = null;
+
+    if (fileExt === '.pdf') {
+      try {
+        const fileBuffer = fs.readFileSync(tempFilePath);
+        if (fileBuffer.length === 0) throw new Error('PDF file buffer is empty.');
+        const pdfData = await pdfParse(fileBuffer);
+        resume_text = pdfData.text || '';
+        if (!resume_text.trim()) throw new Error('No readable text contents found in PDF.');
+        resume_pdf = `/uploads/${req.file.filename}`;
+      } catch (parseErr) {
+        if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+        return res.status(400).json({ error: `Could not parse PDF: ${parseErr.message}` });
+      }
+    } else if (fileExt === '.txt') {
+      resume_text = fs.readFileSync(tempFilePath, 'utf8');
+    } else {
+      resume_text = `[DOCX TEXT INGESTED] ${req.file.originalname}`;
+      resume_docx = `/uploads/${req.file.filename}`;
+    }
+
+    const extracted = await aiService.extractSkills(resume_text);
+
+    const emailMatch = resume_text.match(/[\w.-]+@[\w.-]+\.\w+/);
+    const phoneMatch = resume_text.match(/\+?\d[\d\s\-\(\)]{8,}\d/);
+    const linkedinMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[\w\-]+/i);
+    const githubMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[\w\-]+/i);
+
+    const result = {
+      success: true,
+      candidate_name: extracted.candidate_name || '',
+      email: emailMatch ? emailMatch[0] : '',
+      phone: phoneMatch ? phoneMatch[0] : '',
+      location: extracted.location || '',
+      linkedin_url: linkedinMatch ? (linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`) : '',
+      github_url: githubMatch ? (githubMatch[0].startsWith('http') ? githubMatch[0] : `https://${githubMatch[0]}`) : '',
+      skills: Array.isArray(extracted.skills) ? extracted.skills.join(', ') : (extracted.skills || ''),
+      summary: extracted.summary || '',
+      years_of_experience: extracted.years_of_experience || 0,
+      resume_text: resume_text,
+      resume_pdf,
+      resume_docx
+    };
+
+    res.json(result);
+  } catch (err) {
+    if (tempFilePath && fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/', handleFileUploadMiddleware, async (req, res) => {
   let tempFilePath = null;
   try {
     let name = req.body.name;
@@ -88,16 +157,18 @@ router.post('/', (req, res, next) => {
           const fileBuffer = fs.readFileSync(tempFilePath);
           if (fileBuffer.length === 0) throw new Error('PDF file buffer is empty.');
           const pdfData = await pdfParse(fileBuffer);
-          resume_text = pdfData.text;
+          resume_text = pdfData.text || '';
           
-          if (!resume_text || !resume_text.trim()) throw new Error('No readable text contents found in PDF.');
+          if (!resume_text.trim()) throw new Error('No readable text contents found in PDF.');
           resume_pdf = `/uploads/${req.file.filename}`;
         } catch (parseErr) {
           if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
           return res.status(400).json({ error: `Corrupted or invalid PDF structure: ${parseErr.message}` });
         }
+      } else if (fileExt === '.txt') {
+        resume_text = fs.readFileSync(tempFilePath, 'utf8');
       } else {
-        resume_text = `[DOCX TEXT INGESTED] File: ${req.file.originalname}\n\nSameer Ahmed\nEmail: sameer@example.com\nExperience: 6 years\nSkills: React, Node, SQL, Playwright, Tailwind CSS\nEducation: BS CS Tech University 2019`;
+        resume_text = `[DOCX TEXT INGESTED] File: ${req.file.originalname}`;
         resume_docx = `/uploads/${req.file.filename}`;
       }
     }

@@ -114,7 +114,8 @@ async function runMigrations() {
     { name: 'ats_score', type: 'INT DEFAULT 0' },
     { name: 'matched_skills', type: 'TEXT' },
     { name: 'missing_skills', type: 'TEXT' },
-    { name: 'match_recommendations', type: 'TEXT' }
+    { name: 'match_recommendations', type: 'TEXT' },
+    { name: 'created_at', type: 'TIMESTAMP' }
   ];
 
   if (isPostgres) {
