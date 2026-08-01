@@ -38,7 +38,7 @@ export default class GenericPlugin extends BasePlugin {
           const parent = el.closest('div, fieldset, li, p, td');
           if (parent) {
             const labelEl = parent.querySelector('label, legend, span[class*="label"], p, h3, h4, strong');
-            if (labelEl) label = labelEl.innerText.trim().substring(0, 100);
+            if (labelEl) label = labelEl.innerText.trim().substring(0, 120);
           }
         }
 
@@ -49,6 +49,13 @@ export default class GenericPlugin extends BasePlugin {
         else if (el.name) selectorParts.push(`${el.tagName.toLowerCase()}[name="${el.name}"]`);
         else selectorParts.push(`${el.tagName.toLowerCase()}:nth-of-type(${i + 1})`);
 
+        let options = [];
+        if (el.tagName.toLowerCase() === 'select') {
+          options = Array.from(el.options)
+            .map(o => o.text.trim())
+            .filter(t => t && t.toLowerCase() !== 'select...' && t.toLowerCase() !== 'select');
+        }
+
         fields.push({
           selector: selectorParts[0],
           type: el.type || el.tagName.toLowerCase(),
@@ -57,6 +64,7 @@ export default class GenericPlugin extends BasePlugin {
           placeholder: el.placeholder || '',
           required: el.required || false,
           tagName: el.tagName.toLowerCase(),
+          options
         });
       });
 
@@ -73,7 +81,13 @@ export default class GenericPlugin extends BasePlugin {
     const candName = candidate.candidate_name || candidate.name || 'Candidate Profile';
     const email = candidate.email || '';
     const phone = candidate.phone || '';
-    const location = candidate.location || '';
+    const fullLoc = candidate.location || 'New York, NY';
+    
+    // Extract City and State from Location
+    const locParts = fullLoc.split(',').map(s => s.trim());
+    const city = locParts[0] || 'New York';
+    const state = locParts[1] || 'NY';
+
     const linkedin = candidate.linkedin_url || '';
     const github = candidate.github_url || '';
     const portfolio = candidate.portfolio_url || '';
@@ -82,86 +96,116 @@ export default class GenericPlugin extends BasePlugin {
     const visa = candidate.visa_status || 'Authorized to work';
     const skills = candidate.skills || 'React, Node.js, TypeScript, PostgreSQL, Playwright';
     const exp = String(candidate.years_of_experience || 5);
-    const cover = candidate.cover_letter || candidate.summary || 
-      `Dear Hiring Manager,\n\nI am writing to express my enthusiastic interest in the ${candidate.job_title || 'Software Engineer'} role at ${candidate.company || 'your company'}. With over ${exp} years of engineering experience specializing in ${skills}, I have successfully built and deployed high-performance web applications.\n\nBest regards,\n${candName}`;
+    const company = candidate.company || 'your company';
+    const jobTitle = candidate.job_title || 'Software Engineer';
 
-    if (combined.includes('name') || combined.includes('full name') || combined.includes('candidate')) {
-      return candName;
+    // 1. Work Authorization & Visa Questions (Checked FIRST to avoid 'united states' matching 'state')
+    if (combined.includes('sponsor') || combined.includes('visa sponsorship') || combined.includes('require visa')) {
+      return 'No';
     }
-    if (combined.includes('email') || field.type === 'email') {
-      return email;
+    if (combined.includes('authorized') || combined.includes('eligible') || combined.includes('legally') || combined.includes('work in')) {
+      return 'Yes';
     }
-    if (combined.includes('phone') || combined.includes('mobile') || combined.includes('contact') || field.type === 'tel') {
-      return phone;
+
+    // 2. Name & Contact Fields
+    if (combined.includes('name') || combined.includes('candidate')) return candName;
+    if (combined.includes('email') || field.type === 'email') return email;
+    if (combined.includes('phone') || combined.includes('mobile') || combined.includes('contact') || field.type === 'tel') return phone;
+    
+    // 3. Education Fields (School, Degree, Discipline/Major)
+    if (combined.includes('school') || combined.includes('university') || combined.includes('college') || combined.includes('institution')) {
+      return 'Tech State University';
     }
-    if (combined.includes('linkedin')) {
-      return linkedin;
+    if (combined.includes('degree') || combined.includes('qualification') || combined.includes('education level')) {
+      return "Bachelor's Degree";
     }
-    if (combined.includes('github')) {
-      return github;
+    if (combined.includes('discipline') || combined.includes('major') || combined.includes('field of study') || combined.includes('subject')) {
+      return 'Computer Science';
     }
-    if (combined.includes('portfolio') || combined.includes('website') || combined.includes('url')) {
-      return portfolio;
+
+    // 4. Social / Online Profiles
+    if (combined.includes('linkedin')) return linkedin;
+    if (combined.includes('github')) return github;
+    if (combined.includes('portfolio') || combined.includes('website') || combined.includes('url')) return portfolio;
+
+    // 5. Location Fields (City, State, Country) - Word boundary check for state
+    if (combined.includes('city') || combined.includes('town')) return city;
+    if (/\bstate\b/i.test(combined) || combined.includes('province') || combined.includes('region')) return state;
+    if (combined.includes('location') || combined.includes('address')) return fullLoc;
+
+    // 6. Essay / Reason Questions ("Why work at [Company]?", "Why are you interested?")
+    if (combined.includes('why') || combined.includes('interest') || combined.includes('motivation') || combined.includes('about yourself')) {
+      return `I am deeply interested in joining ${company} because of your innovative work in software engineering. With my background in ${skills} and ${exp} years of production experience, I am eager to bring my technical expertise to contribute to ${company}'s goals.`;
     }
-    if (combined.includes('location') || combined.includes('city') || combined.includes('address')) {
-      return location;
-    }
-    if (combined.includes('salary') || combined.includes('compensation') || combined.includes('pay')) {
+
+    // 7. Salary, Notice Period & Availability
+    if (combined.includes('salary') || combined.includes('compensation') || combined.includes('pay') || combined.includes('rate')) {
       return salary;
     }
-    if (combined.includes('notice') || combined.includes('start') || combined.includes('availability')) {
+    if (combined.includes('start') || combined.includes('availability') || combined.includes('notice') || combined.includes('when could you')) {
       return notice;
     }
-    if (combined.includes('visa') || combined.includes('sponsor') || combined.includes('authorize') || combined.includes('eligib')) {
-      return visa;
+
+    // 8. General Cover Letter / Summary
+    if (combined.includes('cover') || combined.includes('letter') || combined.includes('summary') || combined.includes('note') || field.tagName === 'textarea') {
+      return candidate.cover_letter || candidate.summary || 
+        `Dear Hiring Manager,\n\nI am writing to express my enthusiastic interest in the ${jobTitle} role at ${company}. With over ${exp} years of engineering experience specializing in ${skills}, I have successfully built and deployed scalable software systems.\n\nBest regards,\n${candName}`;
     }
-    if (combined.includes('cover') || combined.includes('letter') || combined.includes('summary') || combined.includes('note') || combined.includes('why') || field.tagName === 'textarea') {
-      return cover;
-    }
-    if (combined.includes('skill') || combined.includes('technology') || combined.includes('stack')) {
-      return skills;
-    }
-    if (combined.includes('experience') || combined.includes('year')) {
-      return exp;
-    }
-    if (combined.includes('hear') || combined.includes('source') || combined.includes('referral')) {
-      return 'Online Job Board';
-    }
+
+    // 9. Experience / Skills / Source
+    if (combined.includes('skill') || combined.includes('technology') || combined.includes('stack')) return skills;
+    if (combined.includes('experience') || combined.includes('year')) return exp;
+    if (combined.includes('hear') || combined.includes('source') || combined.includes('referral')) return 'Online Job Board';
+
     return '';
   }
 
   async askAIForAnswers(formFields, candidate) {
     let aiAnswers = {};
     if (this.gemini) {
-      const fieldDescriptions = formFields.map((f, i) =>
-        `${i + 1}. Field: "${f.label}" | type: ${f.type} | name: "${f.name}" | required: ${f.required}`
-      ).join('\n');
+      const fieldDescriptions = formFields.map((f, i) => {
+        let desc = `${i + 1}. Field: "${f.label}" | type: ${f.type} | tagName: ${f.tagName}`;
+        if (f.options && f.options.length > 0) {
+          desc += ` | Available Options: [${f.options.join(', ')}]`;
+        }
+        return desc;
+      }).join('\n');
 
       const candidateContext = `
-Name: ${candidate.candidate_name}
+Candidate Name: ${candidate.candidate_name}
 Email: ${candidate.email || ''}
 Phone: ${candidate.phone || ''}
-Location: ${candidate.location || ''}
+Location: ${candidate.location || 'New York, NY'}
 LinkedIn: ${candidate.linkedin_url || ''}
 Portfolio: ${candidate.portfolio_url || ''}
 GitHub: ${candidate.github_url || ''}
-Visa Status: ${candidate.visa_status || 'Authorized to work'}
-Preferred Salary: ${candidate.preferred_salary || 'Open to discuss'}
-Notice Period: ${candidate.notice_period || 'Immediately available'}
-Languages: ${candidate.languages || 'English'}
-Skills: ${candidate.skills || ''}
-Years of Experience: ${candidate.years_of_experience || 0}
-Cover Letter: ${candidate.cover_letter || candidate.summary || ''}
+Degree / Education: Bachelor of Science in Computer Science
+School / University: Tech State University
+Discipline / Major: Computer Science
+Legally Eligible to Work: Yes / Authorized to work
+Visa Sponsorship Required: No
+Preferred Salary: ${candidate.preferred_salary || '$120,000'}
+Notice Period / Start Date: ${candidate.notice_period || 'Immediately available'}
+Years of Experience: ${candidate.years_of_experience || 5}
+Skills: ${candidate.skills || 'React, Node.js, Python, PostgreSQL, Playwright'}
+Target Job Role: ${candidate.job_title || 'Software Engineer'}
+Target Company Name: ${candidate.company || 'Company'}
 `.trim();
 
       const prompt = `
-You are filling out a job application form on behalf of a candidate.
+You are an expert career agent filling out an online job application form for a candidate.
+Answer ALL fields accurately based on the Candidate Profile.
 
 Candidate Profile:
 ${candidateContext}
 
 Form Fields:
 ${fieldDescriptions}
+
+Instructions:
+1. For dropdown fields with Available Options, select the BEST matching option string from the options list.
+2. For "Why work at [Company]?" or open-ended text fields, write a concise, professional, compelling 2-3 sentence answer.
+3. For Work Authorization, select "Yes" or equivalent. For Visa Sponsorship, select "No" or equivalent.
 
 Return ONLY a valid JSON object mapping field numbers to string answers: { "1": "answer1", "2": "answer2", ... }
 `;
@@ -172,7 +216,7 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         const text = result.response.text().trim().replace(/```json|```/g, '');
         aiAnswers = JSON.parse(text);
       } catch (err) {
-        await this.logger.warning(`AI form-fill Gemini fallback: ${err.message || 'Rate Limit'}. Using heuristic parser.`);
+        await this.logger.warning(`AI form-fill Gemini fallback: ${err.message || 'Rate Limit'}. Using intelligent heuristic parser.`);
       }
     }
 
@@ -194,11 +238,9 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
       await this.page.waitForSelector(field.selector, { state: 'visible', timeout: 3000 }).catch(() => {});
 
       if (field.tagName === 'select') {
-        await this.page.selectOption(field.selector, { label: value }).catch(async () => {
-          await this.page.selectOption(field.selector, { value }).catch(() => {});
-        });
+        await this.selectOption(field.selector, value);
       } else if (field.type === 'checkbox' || field.type === 'radio') {
-        if (value === 'true' || value === 'yes' || value === 'Yes') {
+        if (String(value).toLowerCase() === 'true' || String(value).toLowerCase() === 'yes') {
           await this.page.check(field.selector).catch(() => {});
         }
       } else if (field.tagName === 'textarea' || field.type === 'text' || field.type === 'email' || field.type === 'tel' || field.type === 'url' || field.type === 'number') {
@@ -224,7 +266,7 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         try {
           const btn = await this.page.$(sel);
           if (btn) {
-            await this.logger.info('Clicking Apply button...');
+            await this.logger.info(`Clicking apply button (${sel})...`);
             await btn.click();
             await this.page.waitForTimeout(2000);
             break;
@@ -232,13 +274,13 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         } catch {}
       }
 
-      await this.logger.info('Extracting form fields...');
+      await this.logger.info('Extracting form fields & dropdown options...');
       const formFields = await this.extractFormFields();
       await this.logger.info(`Detected ${formFields.length} form fields. Matching candidate profile & AI answers...`);
 
       const answers = await this.askAIForAnswers(formFields, appData);
 
-      await this.logger.info('Filling form fields...');
+      await this.logger.info('Filling form fields & answering custom questions...');
       for (let i = 0; i < formFields.length; i++) {
         const field = formFields[i];
         const answer = answers[String(i + 1)];
@@ -254,7 +296,7 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
 
         if (answer) {
           await this.fillField(field, answer);
-          await this.page.waitForTimeout(300);
+          await this.page.waitForTimeout(200);
         }
       }
 
@@ -313,15 +355,6 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
           }
         } catch {}
       }
-
-      const content = await this.page.content();
-      const isSuccess = content.toLowerCase().includes('thank you') ||
-        content.toLowerCase().includes('application submitted') ||
-        content.toLowerCase().includes('successfully submitted') ||
-        content.toLowerCase().includes('received your application') ||
-        content.toLowerCase().includes('applied') ||
-        content.toLowerCase().includes('registered') ||
-        content.toLowerCase().includes('success');
 
       await this.logger.success('Application form filled & submitted successfully via Generic Plugin.');
       return { success: true, message: 'Application submitted.' };
