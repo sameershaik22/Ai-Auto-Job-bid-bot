@@ -330,6 +330,19 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         } catch {}
       }
 
+      if (resumePath && fs.existsSync(resumePath)) {
+        try {
+          const fileInputs = await this.page.$$('input[type="file"]');
+          if (fileInputs.length > 0) {
+            for (const fi of fileInputs) {
+              await fi.setInputFiles(path.resolve(resumePath)).catch(() => {});
+            }
+            await this.logger.info(`Attached physical resume file (${path.basename(resumePath)}).`);
+            await this.page.waitForTimeout(1500);
+          }
+        } catch {}
+      }
+
       await this.logger.info('Extracting form fields & dropdown options...');
       const formFields = await this.extractFormFields();
       await this.logger.info(`Detected ${formFields.length} form fields. Matching candidate profile & AI answers...`);
@@ -341,11 +354,11 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         const field = formFields[i];
         const answer = answers[String(i + 1)];
 
-        if (field.type === 'file' && resumePath) {
+        if (field.type === 'file' && resumePath && fs.existsSync(resumePath)) {
           try {
-            await this.page.setInputFiles(field.selector, path.resolve(resumePath));
-            await this.logger.info('Uploaded physical resume file.');
-            await this.page.waitForTimeout(2000);
+            await this.page.setInputFiles(field.selector, path.resolve(resumePath)).catch(() => {});
+            await this.logger.info(`Uploaded physical resume file to ${field.label || 'file field'}.`);
+            await this.page.waitForTimeout(1500);
           } catch {}
           continue;
         }

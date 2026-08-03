@@ -87,8 +87,19 @@ export async function runAutomation(applicationId, io) {
     if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
 
     const safeName = (app.candidate_name || 'candidate').replace(/\s+/g, '_');
-    const resumeFilePath = path.join(uploadsDir, `resume_${safeName}_${applicationId}.pdf`);
-    fs.writeFileSync(resumeFilePath, app.tailored_resume_text || app.resume_text || 'Resume Content');
+    let resumeFilePath = null;
+    if (app.resume_pdf) {
+      const pdfAbs = path.resolve(__dirname, '../public', app.resume_pdf.replace(/^\//, ''));
+      if (fs.existsSync(pdfAbs)) resumeFilePath = pdfAbs;
+    }
+    if (!resumeFilePath && app.resume_docx) {
+      const docxAbs = path.resolve(__dirname, '../public', app.resume_docx.replace(/^\//, ''));
+      if (fs.existsSync(docxAbs)) resumeFilePath = docxAbs;
+    }
+    if (!resumeFilePath) {
+      resumeFilePath = path.join(uploadsDir, `resume_${safeName}_${applicationId}.pdf`);
+      fs.writeFileSync(resumeFilePath, app.tailored_resume_text || app.resume_text || 'Resume Content');
+    }
 
     await logger.info(`Launching browser for ${app.candidate_name} → ${app.job_title} at ${app.company}`);
 
