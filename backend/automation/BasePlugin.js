@@ -172,8 +172,11 @@ export default class BasePlugin {
     try {
       const captchaDetected = await this.page.evaluate(() => {
         const frames = Array.from(document.querySelectorAll('iframe'));
-        const hasRecaptcha = frames.some(f => (f.src || '').includes('recaptcha') || (f.src || '').includes('hcaptcha') || (f.src || '').includes('turnstile'));
-        const hasContainer = !!document.querySelector('.g-recaptcha, .cf-turnstile, #hcaptcha-container, [class*="captcha"]');
+        const hasRecaptcha = frames.some(f => {
+          const src = (f.src || '').toLowerCase();
+          return src.includes('recaptcha/api2') || src.includes('hcaptcha.com') || src.includes('challenges.cloudflare.com/turnstile');
+        });
+        const hasContainer = !!document.querySelector('.g-recaptcha, .cf-turnstile, #hcaptcha-container');
         return hasRecaptcha || hasContainer;
       });
 

@@ -1,5 +1,6 @@
 import BasePlugin from '../BasePlugin.js';
 import path from 'path';
+import fs from 'fs';
 
 export default class GenericPlugin extends BasePlugin {
   constructor(page, logger, config = {}) {
@@ -341,8 +342,11 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
       const validation = await this.validateFormState(appData, resumePath);
 
       const applySelectors = [
-        'a[href*="apply"]', 'button:has-text("Apply")', 'a:has-text("Apply Now")',
-        'a:has-text("Apply for this job")', '.apply-button', '#apply-button',
+        'button:has-text("Apply now")', 'a:has-text("Apply now")',
+        'button:has-text("Apply Now")', 'a:has-text("Apply Now")',
+        'button:has-text("Apply")', 'a:has-text("Apply")',
+        'a[href*="apply"]', 'button[aria-label*="Apply"]',
+        'button[data-automation*="apply"]', '.apply-button', '#apply-button',
         'button[data-qa="btn-apply"]', '.job-apply-button'
       ];
 
@@ -350,10 +354,23 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         try {
           const btn = await this.page.$(sel);
           if (btn) {
-            await this.logger.info(`Clicking apply button (${sel})...`);
-            await btn.click();
-            await this.page.waitForTimeout(2000);
-            break;
+            const isVisible = await btn.isVisible().catch(() => true);
+            if (isVisible) {
+              await this.logger.info(`Clicking apply button (${sel})...`);
+              const context = this.page.context();
+              const pagePromise = context.waitForEvent('page', { timeout: 4000 }).catch(() => null);
+              await btn.click({ force: true }).catch(async () => {
+                await this.page.evaluate(b => b.click(), btn).catch(() => {});
+              });
+              const newPage = await pagePromise;
+              if (newPage) {
+                await this.logger.info('Apply button opened application form in new browser tab.');
+                this.page = newPage;
+                await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+              }
+              await this.page.waitForTimeout(2500);
+              break;
+            }
           }
         } catch {}
       }
