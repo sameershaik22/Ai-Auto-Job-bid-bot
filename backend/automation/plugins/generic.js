@@ -54,6 +54,16 @@ export default class GenericPlugin extends BasePlugin {
           options = Array.from(el.options)
             .map(o => o.text.trim())
             .filter(t => t && t.toLowerCase() !== 'select...' && t.toLowerCase() !== 'select');
+        } else if (el.type === 'radio' && el.name) {
+          const radioGroup = document.querySelectorAll(`input[type="radio"][name="${el.name}"]`);
+          options = Array.from(radioGroup).map(r => {
+            let rLabel = r.value;
+            if (r.id) {
+              const lbl = document.querySelector(`label[for="${r.id}"]`);
+              if (lbl) rLabel = lbl.innerText.trim();
+            }
+            return rLabel || r.value;
+          }).filter(Boolean);
         }
 
         fields.push({
@@ -239,8 +249,54 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
 
       if (field.tagName === 'select') {
         await this.selectOption(field.selector, value);
-      } else if (field.type === 'checkbox' || field.type === 'radio') {
-        if (String(value).toLowerCase() === 'true' || String(value).toLowerCase() === 'yes') {
+      } else if (field.type === 'range') {
+        // Handle Sliders & Range Controls
+        await this.page.evaluate(({ sel, val }) => {
+          const el = document.querySelector(sel);
+          if (el) {
+            el.value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }, { sel: field.selector, val: String(value) }).catch(() => {});
+      } else if (field.type === 'radio') {
+        // Handle Radio Button Groups
+        await this.page.evaluate(({ sel, val, name }) => {
+          const valLower = String(val).toLowerCase().trim();
+          let radios = [];
+          if (name) {
+            radios = Array.from(document.querySelectorAll(`input[type="radio"][name="${name}"]`));
+          }
+          if (radios.length === 0) {
+            const el = document.querySelector(sel);
+            if (el) radios = [el];
+          }
+          for (let r of radios) {
+            let labelText = '';
+            if (r.id) {
+              const l = document.querySelector(`label[for="${r.id}"]`);
+              if (l) labelText = l.innerText;
+            }
+            if (!labelText) {
+              const p = r.closest('label, div, li, p');
+              if (p) labelText = p.innerText;
+            }
+            const combined = `${r.value} ${labelText}`.toLowerCase();
+            if (combined.includes(valLower) || (valLower === 'yes' && (r.value === '1' || combined.includes('yes'))) || (valLower === 'no' && (r.value === '0' || combined.includes('no')))) {
+              r.checked = true;
+              r.dispatchEvent(new Event('change', { bubbles: true }));
+              return true;
+            }
+          }
+          if (radios[0]) {
+            radios[0].checked = true;
+            radios[0].dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return true;
+        }, { sel: field.selector, val: value, name: field.name }).catch(() => {});
+      } else if (field.type === 'checkbox') {
+        const valStr = String(value).toLowerCase();
+        if (valStr === 'true' || valStr === 'yes' || valStr === '1') {
           await this.page.check(field.selector).catch(() => {});
         }
       } else if (field.tagName === 'textarea' || field.type === 'text' || field.type === 'email' || field.type === 'tel' || field.type === 'url' || field.type === 'number') {
