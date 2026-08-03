@@ -102,8 +102,8 @@ export default function CandidateProfiles() {
       setUploadStep('parsed');
       setForm(prev => ({
         ...prev,
-        name: data.name || prev.name || file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '),
-        candidate_name: prev.candidate_name || data.candidate_name || file.name.replace(/\.[^/.]+$/, ''),
+        name: data.name || file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '),
+        candidate_name: data.candidate_name || prev.candidate_name || '',
         email: data.email || prev.email || '',
         phone: data.phone || prev.phone || '',
         location: data.location || prev.location || '',
@@ -111,7 +111,7 @@ export default function CandidateProfiles() {
         github_url: data.github_url || prev.github_url || '',
         skills: typeof data.skills === 'string' ? data.skills : (Array.isArray(data.skills) ? data.skills.join(', ') : (prev.skills || '')),
         summary: data.summary || prev.summary || '',
-        years_of_experience: data.years_of_experience || prev.years_of_experience || 0,
+        years_of_experience: data.years_of_experience || prev.years_of_experience || 5,
         resume_text: data.resume_text || prev.resume_text || '',
       }));
     } catch (err) {

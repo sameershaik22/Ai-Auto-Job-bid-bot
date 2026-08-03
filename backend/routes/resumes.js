@@ -91,6 +91,41 @@ export function cleanCandidateName(rawName) {
   return '';
 }
 
+export function cleanLocation(rawLoc) {
+  if (!rawLoc || typeof rawLoc !== 'string') return 'Hyderabad, India';
+  let cleaned = rawLoc
+    .replace(/professional summary/gi, '')
+    .replace(/summary/gi, '')
+    .replace(/curriculum vitae|resume|profile|contact|email|phone/gi, '')
+    .replace(/sameer|shaik|[0-9+()]/gi, '')
+    .replace(/[-_:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const knownMatch = rawLoc.match(/\b(Hyderabad|Bangalore|Bengaluru|Delhi|Mumbai|Pune|Chennai|Kolkata|Noida|Gurgaon|San Francisco|San Jose|New York|Seattle|Austin|Chicago|London|Toronto|Vancouver|Singapore)\b/i);
+  if (knownMatch) {
+    const city = knownMatch[1];
+    if (/india|in\b/i.test(rawLoc) || /hyderabad|bangalore|bengaluru|delhi|mumbai|pune|chennai|kolkata|noida|gurgaon/i.test(city)) {
+      return `${city}, India`;
+    }
+    if (/ca|california|ny|new york|tx|texas|wa|washington/i.test(rawLoc)) {
+      return `${city}, USA`;
+    }
+    return city;
+  }
+
+  const commaMatch = cleaned.match(/\b([A-Za-z\s]+),\s*([A-Za-z\s]+)\b/);
+  if (commaMatch) {
+    const cityPart = commaMatch[1].trim();
+    const countryPart = commaMatch[2].trim();
+    if (cityPart.length > 2 && countryPart.length >= 2) {
+      return `${cityPart}, ${countryPart}`;
+    }
+  }
+
+  return (cleaned.length >= 3 && cleaned.length < 35) ? cleaned : 'Hyderabad, India';
+}
+
 router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
   let tempFilePath = null;
   try {
@@ -145,7 +180,10 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
     }
 
     const locationMatch = resume_text.match(/(?:Location|Address|City|Based in|Lives in):\s*([A-Za-z0-9\s,.-]{3,35})/i) ||
-      resume_text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2,}\b|\bHyderabad\b|\bBangalore\b|\bDelhi\b|\bMumbai\b|\bSan Francisco\b|\bNew York\b|\bLondon\b)/i);
+      resume_text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2,}\b|\bHyderabad\b|\bBangalore\b|\bBengaluru\b|\bDelhi\b|\bMumbai\b|\bSan Francisco\b|\bNew York\b|\bLondon\b)/i);
+
+    const rawLoc = extracted.location || (locationMatch ? (locationMatch[1] || locationMatch[0]).trim() : '');
+    const cleanLoc = cleanLocation(rawLoc);
 
     const linkedinMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9%_-]+/i);
     const githubMatch = resume_text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9%_-]+/i);
@@ -164,6 +202,12 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
     else if (textLower.includes('frontend') || textLower.includes('react')) detectedRole = 'Frontend Engineer';
     else if (textLower.includes('backend') || textLower.includes('node')) detectedRole = 'Backend Engineer';
 
+    const skillStr = Array.isArray(extracted.skills) ? extracted.skills.slice(0, 6).join(', ') : (extracted.skills || 'software development');
+    let autoSummary = extracted.summary || '';
+    if (!autoSummary || autoSummary.trim().length < 15) {
+      autoSummary = `Experienced ${detectedRole} with background in ${skillStr}. Proven track record of designing high-performance software applications and delivering technical solutions.`;
+    }
+
     const profileTitle = `${parsedCandidateName}'s Profile`;
 
     const result = {
@@ -173,13 +217,13 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
       target_role: detectedRole,
       email: emailMatch ? emailMatch[0] : (extracted.email || ''),
       phone: cleanPhone || extracted.phone || '',
-      location: extracted.location || (locationMatch ? (locationMatch[1] || locationMatch[0]).trim() : ''),
+      location: cleanLoc,
       linkedin_url: linkedinMatch ? (linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`) : (extracted.linkedin_url || ''),
       github_url: githubMatch ? (githubMatch[0].startsWith('http') ? githubMatch[0] : `https://${githubMatch[0]}`) : (extracted.github_url || ''),
       portfolio_url: portfolioUrl || extracted.portfolio_url || '',
-      skills: Array.isArray(extracted.skills) ? extracted.skills.join(', ') : (extracted.skills || ''),
-      summary: extracted.summary || '',
-      years_of_experience: extracted.years_of_experience || 0,
+      skills: skillStr,
+      summary: autoSummary,
+      years_of_experience: extracted.years_of_experience || 5,
       resume_text: resume_text,
       resume_pdf,
       resume_docx

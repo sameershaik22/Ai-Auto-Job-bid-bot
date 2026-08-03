@@ -320,15 +320,17 @@ Portfolio Links: ${portfolioLinks || 'None provided'}
 }
 
 export async function extractSkills(resumeText) {
-  const prompt = `Analyze this resume and extract the candidate name, skills, experience, education, years of experience, categories, and technologies.
+  const prompt = `Analyze this resume and extract the candidate name, location (city/country), summary, skills, experience, education, years of experience, categories, and technologies.
 Resume:
 ${resumeText}
 `;
   const systemPrompt = `
-Extract skills, education list, experience list, candidate name, years of experience, categories, and technologies.
+Extract skills, education list, experience list, candidate name, location (city/country), professional summary, years of experience, categories, and technologies.
 Return ONLY a valid JSON object matching this schema:
 {
   "candidate_name": "Full Candidate Name extracted from Resume",
+  "location": "City, Country (e.g. Hyderabad, India)",
+  "summary": "A concise 2-3 sentence professional summary of experience and technical expertise",
   "skills": ["skill1", "skill2"],
   "experience": [
     { "role": "Role", "company": "Company", "duration": "Dates", "highlights": ["Highlight 1"] }
