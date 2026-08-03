@@ -347,7 +347,7 @@ Do not write markdown block ticks. JSON only.
     const sanitized = raw.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(sanitized);
     const fallbackName = extractCandidateNameFromText(resumeText);
-    if (!parsed.candidate_name || parsed.candidate_name === 'Name' || parsed.candidate_name === 'Sameer Ahmed' || parsed.candidate_name === 'Candidate Profile') {
+    if (!parsed.candidate_name || parsed.candidate_name.toLowerCase() === 'name' || parsed.candidate_name.toLowerCase() === 'candidate profile' || parsed.candidate_name.toLowerCase() === 'candidate') {
       parsed.candidate_name = fallbackName || 'Candidate Profile';
     }
     return parsed;

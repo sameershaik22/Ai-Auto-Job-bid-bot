@@ -75,6 +75,22 @@ router.get('/', async (req, res) => {
   }
 });
 
+export function cleanCandidateName(rawName) {
+  if (!rawName || typeof rawName !== 'string') return '';
+  let clean = rawName.replace(/\.[^/.]+$/, '');
+  clean = clean.replace(/[-_]/g, ' ');
+  
+  const noiseWords = ['resume', 'cv', 'curriculum', 'vitae', 'sde', 'swe', 'software', 'engineer', 'engineering', 'developer', 'fullstack', 'backend', 'frontend', 'profile', 'latest', 'updated', 'final', 'pdf', 'docx', 'txt', 'copy', 'doc'];
+  const regex = new RegExp(`\\b(${noiseWords.join('|')})\\b`, 'gi');
+  clean = clean.replace(regex, '').replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
+  
+  const words = clean.split(/\s+/).filter(w => w.length >= 2);
+  if (words.length >= 1) {
+    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+  return '';
+}
+
 router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
   let tempFilePath = null;
   try {
@@ -111,7 +127,14 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
     }
 
     const extracted = await aiService.extractSkills(resume_text);
-    const dynamicName = aiService.extractCandidateNameFromText(resume_text) || (req.file ? req.file.originalname.replace(/\.[^/.]+$/, '') : '');
+    const textName = aiService.extractCandidateNameFromText(resume_text);
+    const filenameName = req.file ? cleanCandidateName(req.file.originalname) : '';
+
+    let parsedCandidateName = (extracted.candidate_name && extracted.candidate_name.toLowerCase() !== 'candidate profile' && extracted.candidate_name.toLowerCase() !== 'name')
+      ? extracted.candidate_name
+      : (textName || filenameName || 'Candidate Profile');
+
+    parsedCandidateName = cleanCandidateName(parsedCandidateName) || parsedCandidateName;
 
     const emailMatch = resume_text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
     
@@ -133,10 +156,6 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
       portfolioUrl = portfolioMatch[0].startsWith('http') ? portfolioMatch[0] : `https://${portfolioMatch[0]}`;
     }
 
-    const parsedCandidateName = (extracted.candidate_name && extracted.candidate_name !== 'Candidate Profile' && extracted.candidate_name !== 'Sameer Ahmed')
-      ? extracted.candidate_name
-      : (dynamicName || 'Candidate Profile');
-
     const textLower = resume_text.toLowerCase();
     let detectedRole = 'Software Engineer';
     if (textLower.includes('ai/ml') || textLower.includes('machine learning') || textLower.includes('deep learning')) detectedRole = 'AI/ML Engineer';
@@ -145,9 +164,7 @@ router.post('/ingest', handleFileUploadMiddleware, async (req, res) => {
     else if (textLower.includes('frontend') || textLower.includes('react')) detectedRole = 'Frontend Engineer';
     else if (textLower.includes('backend') || textLower.includes('node')) detectedRole = 'Backend Engineer';
 
-    const profileTitle = req.file 
-      ? req.file.originalname.replace(/\.[^/.]+$/, '') 
-      : `${parsedCandidateName} - ${detectedRole}`;
+    const profileTitle = `${parsedCandidateName}'s Profile`;
 
     const result = {
       success: true,
@@ -218,8 +235,15 @@ router.post('/', handleFileUploadMiddleware, async (req, res) => {
     }
 
     const extracted = await aiService.extractSkills(resume_text);
-    const dynamicName = aiService.extractCandidateNameFromText(resume_text);
-    candidate_name = candidate_name || (extracted.candidate_name && extracted.candidate_name !== 'Sameer Ahmed' && extracted.candidate_name !== 'Candidate Profile' ? extracted.candidate_name : dynamicName) || 'Candidate Profile';
+    const textName = aiService.extractCandidateNameFromText(resume_text);
+    const filenameName = req.file ? cleanCandidateName(req.file.originalname) : '';
+
+    let parsedCandidateName = candidate_name || (extracted.candidate_name && extracted.candidate_name.toLowerCase() !== 'candidate profile' && extracted.candidate_name.toLowerCase() !== 'name' ? extracted.candidate_name : textName) || filenameName || 'Candidate Profile';
+
+    candidate_name = cleanCandidateName(parsedCandidateName) || parsedCandidateName;
+    if (!name || name.toLowerCase().includes('resume') || name.toLowerCase().includes('sde') || name.endsWith('.pdf') || name.endsWith('.docx')) {
+      name = `${candidate_name}'s Profile`;
+    }
 
     const prefixToCheck = resume_text.substring(0, 100);
     const existingDuplicate = await queryOne(`
