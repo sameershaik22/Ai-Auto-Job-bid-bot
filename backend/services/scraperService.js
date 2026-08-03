@@ -36,11 +36,80 @@ Return ONLY a valid JSON object matching this schema:
   "company": "Company Name",
   "description": "Full details description...",
   "skills_required": ["skill1", "skill2"],
-  "location": "Location (e.g. Remote, New York)",
-  "salary": "Salary (e.g. $120k - $150k or TBD)"
+  "location": "Location (e.g. Remote, New York, Bangalore - Onsite)",
+  "salary": "Salary (e.g. $120k - $150k or Competitive)"
 }
 Do not write markdown ticks. JSON only.
 `;
+
+function decodeHTMLEntities(str) {
+  if (!str) return '';
+  return str
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/')
+    .replace(/&nbsp;/g, ' ');
+}
+
+function extractJsonLdMetadata(htmlText) {
+  if (!htmlText) return null;
+  try {
+    const matches = htmlText.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    if (!matches) return null;
+
+    for (const match of matches) {
+      const jsonStr = match.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '').trim();
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const items = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed]);
+        for (const item of items) {
+          if (item && (item['@type'] === 'JobPosting' || item['@type'] === 'http://schema.org/JobPosting')) {
+            let company = '';
+            if (item.hiringOrganization) {
+              company = typeof item.hiringOrganization === 'string' ? item.hiringOrganization : (item.hiringOrganization.name || '');
+            }
+            let location = '';
+            if (item.jobLocation) {
+              const locs = Array.isArray(item.jobLocation) ? item.jobLocation : [item.jobLocation];
+              const places = locs.map(l => {
+                if (!l) return '';
+                if (typeof l === 'string') return l;
+                if (l.address) {
+                  const addr = l.address;
+                  const parts = [addr.addressLocality, addr.addressRegion, addr.addressCountry?.name || addr.addressCountry].filter(Boolean);
+                  return parts.join(', ');
+                }
+                return l.name || '';
+              }).filter(Boolean);
+              if (places.length > 0) location = places[0];
+            }
+            if (item.applicantLocationRequirements) {
+              location = location ? `${location} (Remote)` : 'Remote';
+            }
+
+            let cleanDesc = item.description || '';
+            cleanDesc = decodeHTMLEntities(cleanDesc).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+            return {
+              title: item.title || '',
+              company,
+              description: cleanDesc,
+              location: location || '',
+              employmentType: item.employmentType || ''
+            };
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
 
 async function fetchPageWithPlaywright(url) {
   let browser = null;
@@ -51,21 +120,37 @@ async function fetchPageWithPlaywright(url) {
     });
     const page = await context.newPage();
     
-    // Clean registration query parameters if main detail page is available
     const cleanUrl = url.replace(/\/register(?:\?.*)?$/, '');
-    await page.goto(cleanUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
-    await page.waitForTimeout(2500);
+    await page.goto(cleanUrl, { waitUntil: 'networkidle', timeout: 30000 }).catch(async () => {
+      await page.goto(cleanUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+    });
+    await page.waitForTimeout(3000);
 
-    const extractedHeader = await page.evaluate(() => {
-      const h1s = Array.from(document.querySelectorAll('h1, h2, [class*="title"], [class*="heading"]'))
+    const extracted = await page.evaluate(() => {
+      const ldScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+      let ldData = null;
+      for (const s of ldScripts) {
+        try {
+          const parsed = JSON.parse(s.innerText);
+          const items = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed]);
+          const jp = items.find(i => i && (i['@type'] === 'JobPosting' || i['@type'] === 'http://schema.org/JobPosting'));
+          if (jp) { ldData = jp; break; }
+        } catch {}
+      }
+
+      const noiseWords = ['application form', 'cookies', 'careers', 'view all', 'global', 'single position', 'sign in', 'join talent network', 'locations', 'professions', 'life at'];
+      const h1s = Array.from(document.querySelectorAll('h1, h2, [class*="job-title"], [class*="title"], [data-automation-id="jobTitle"]'))
         .map(el => el.innerText.trim())
-        .filter(t => t.length > 3 && !t.toLowerCase().includes('application form') && !t.toLowerCase().includes('cookies'));
+        .filter(t => t.length > 3 && !noiseWords.some(w => t.toLowerCase().includes(w)));
       
-      const companyEl = document.querySelector('[class*="company"], [class*="org"], [class*="employer"], [class*="subtitle"], [class*="sub-title"]');
+      const companyEl = document.querySelector('[class*="company"], [class*="org"], [class*="employer"]');
+      const locationEl = document.querySelector('[class*="location"], [class*="Location"], [data-automation-id="jobLocation"]');
       
       return {
         mainTitle: h1s[0] || '',
-        companyName: companyEl ? companyEl.innerText.trim() : ''
+        companyName: companyEl ? companyEl.innerText.trim() : '',
+        locationText: locationEl ? locationEl.innerText.trim() : '',
+        ldData
       };
     });
 
@@ -74,10 +159,12 @@ async function fetchPageWithPlaywright(url) {
     const bodyText = await page.evaluate(() => document.body ? document.body.innerText : '');
     
     return {
-      title: extractedHeader.mainTitle || title,
-      company: extractedHeader.companyName || '',
+      title: extracted.mainTitle || title,
+      company: extracted.companyName || '',
+      location: extracted.locationText || '',
       content,
-      bodyText
+      bodyText,
+      ldData: extracted.ldData
     };
   } catch (err) {
     console.warn(`Playwright fetch error for ${url}: ${err.message}`);
@@ -90,11 +177,13 @@ async function fetchPageWithPlaywright(url) {
 function parseMetadataFromTitleAndUrl(text, url = '', extraMeta = {}) {
   let title = extraMeta.title || '';
   let company = extraMeta.company || '';
+  let location = extraMeta.location || '';
 
-  const isDisclaimer = (str) => !str || str.length > 50 || /fee|notify|disclaimer|terms|privacy|copyright|cookie|register|application/i.test(str);
+  const isDisclaimer = (str) => !str || str.length > 50 || /fee|notify|disclaimer|terms|privacy|copyright|cookie|register|application|benefits/i.test(str);
 
   if (isDisclaimer(company)) company = '';
-  if (title.toLowerCase() === 'register' || title.toLowerCase() === 'apply') title = '';
+  const invalidGenericTitles = ['example domain', 'register', 'apply', 'careers', 'global', 'home', 'jobs'];
+  if (invalidGenericTitles.includes(title.toLowerCase())) title = '';
 
   const ogTitleMatch = text.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
     text.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
@@ -104,8 +193,8 @@ function parseMetadataFromTitleAndUrl(text, url = '', extraMeta = {}) {
 
   if (rawTitle) {
     const cleaned = rawTitle
-      .replace(/\s*\|\s*(?:Unstop|LinkedIn|Indeed|Glassdoor|ZipRecruiter|Monster|Naukri|SimplyHired)$/i, '')
-      .replace(/\s*-\s*(?:Unstop|LinkedIn|Indeed|Glassdoor|ZipRecruiter|Monster|Naukri|SimplyHired)$/i, '')
+      .replace(/\s*\|\s*(?:Unstop|LinkedIn|Indeed|Glassdoor|ZipRecruiter|Monster|Naukri|SimplyHired|Microsoft Careers)$/i, '')
+      .replace(/\s*-\s*(?:Unstop|LinkedIn|Indeed|Glassdoor|ZipRecruiter|Monster|Naukri|SimplyHired|Microsoft Careers)$/i, '')
       .replace(/^Register for\s+/i, '')
       .replace(/^Apply for\s+/i, '')
       .trim();
@@ -127,7 +216,14 @@ function parseMetadataFromTitleAndUrl(text, url = '', extraMeta = {}) {
     }
   }
 
-  // Look for "at Company" or "by Company" or "Company:" in clean text
+  if (!company || isDisclaimer(company)) {
+    if (url.includes('microsoft.com')) company = 'Microsoft';
+    else if (url.includes('google.com')) company = 'Google';
+    else if (url.includes('amazon.com')) company = 'Amazon';
+    else if (url.includes('apple.com')) company = 'Apple';
+    else if (url.includes('meta.com')) company = 'Meta';
+  }
+
   if (!company || isDisclaimer(company)) {
     const atMatch = text.match(/(?:at|by|company:?)\s+([A-Z][A-Za-z0-9\s&]{2,30}(?:Technologies|Tech|Inc|LLC|Corp|Software|Labs|Solutions|Global|Services|Group|Studio)?)/i);
     if (atMatch && !isDisclaimer(atMatch[1])) {
@@ -141,27 +237,56 @@ function parseMetadataFromTitleAndUrl(text, url = '', extraMeta = {}) {
       const hostParts = parsedUrl.hostname.replace('www.', '').split('.');
       if (hostParts.length >= 2) {
         const brand = hostParts[hostParts.length - 2];
-        if (!['unstop', 'com', 'org', 'net', 'co', 'io'].includes(brand.toLowerCase())) {
+        if (!['unstop', 'com', 'org', 'net', 'co', 'io', 'careers', 'jobs', 'apply', 'example'].includes(brand.toLowerCase())) {
           company = brand.charAt(0).toUpperCase() + brand.slice(1);
         }
       }
     } catch {}
   }
 
-  if (!title && url) {
+  if (url && (!title || !company || isDisclaimer(company))) {
     try {
       const parsedUrl = new URL(url);
       const segments = parsedUrl.pathname.split('/').filter(Boolean);
-      const last = segments.filter(s => !['register', 'apply', 'job', 'jobs', 'index.html'].includes(s.toLowerCase()) && !/^\d+$/.test(s)).pop();
+      const last = segments.filter(s => !['register', 'apply', 'job', 'jobs', 'careers', 'index.html'].includes(s.toLowerCase()) && !/^\d+$/.test(s)).pop();
       if (last) {
-        title = last.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        if (last.includes('-')) {
+          const parts = last.split('-');
+          const lastPart = parts[parts.length - 1];
+          if (lastPart && !['engineer', 'developer', 'manager', 'lead', 'designer', 'role'].includes(lastPart.toLowerCase())) {
+            if (!company || isDisclaimer(company)) {
+              company = lastPart.charAt(0).toUpperCase() + lastPart.slice(1) + ' Inc.';
+            }
+            if (!title) {
+              title = parts.slice(0, parts.length - 1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            }
+          }
+        }
+        if (!title) {
+          title = last.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        }
       }
     } catch {}
   }
 
+  // Determine Onsite / Hybrid vs Remote location
+  const lower = text.toLowerCase();
+  if (!location) {
+    if (lower.includes('in-office') || lower.includes('3 days / week') || lower.includes('onsite') || lower.includes('on-site')) {
+      const cityMatch = text.match(/(?:Bangalore|Bengaluru|Hyderabad|Noida|Seattle|Redmond|San Francisco|New York|Austin|London|Toronto)/i);
+      location = cityMatch ? `${cityMatch[0]} (On-site / Hybrid)` : 'On-site / Hybrid';
+    } else if (lower.includes('remote')) {
+      location = 'Remote';
+    } else {
+      const cityMatch = text.match(/(?:Bangalore|Bengaluru|Hyderabad|Noida|Seattle|Redmond|San Francisco|New York|Austin|London|Toronto)/i);
+      location = cityMatch ? cityMatch[0] : 'On-site / Hybrid';
+    }
+  }
+
   return {
-    title: title || 'Target Vacancy Role',
-    company: company || 'Recruiting Company'
+    title: title || 'Software Engineer',
+    company: company || 'Recruiting Company',
+    location: location || 'On-site / Hybrid'
   };
 }
 
@@ -207,8 +332,9 @@ function runScraperSimulation(text, url = '', extraMeta = {}) {
   
   let title = parsedMeta.title;
   let company = parsedMeta.company;
+  let location = parsedMeta.location;
 
-  if (!title || title === 'Software Engineer' || title === 'Register') {
+  if (!title || title === 'Software Engineer' || title === 'Register' || title === 'Careers') {
     if (lowercaseText.includes('ai/ml') || lowercaseText.includes('machine learning')) title = 'AI/ML Developer Internship';
     else if (lowercaseText.includes('frontend')) title = 'Frontend Engineer';
     else if (lowercaseText.includes('backend')) title = 'Backend Engineer';
@@ -216,7 +342,7 @@ function runScraperSimulation(text, url = '', extraMeta = {}) {
     else title = 'Software Engineer';
   }
 
-  const skillsList = ['React', 'Node.js', 'PostgreSQL', 'TypeScript', 'Playwright', 'Python', 'Machine Learning', 'Express', 'Tailwind CSS', 'Docker', 'AWS', 'Java', 'C++', 'Git'];
+  const skillsList = ['React', 'Node.js', 'PostgreSQL', 'TypeScript', 'Playwright', 'Python', 'Machine Learning', 'Express', 'Tailwind CSS', 'Docker', 'AWS', 'Java', 'C++', 'C#', 'Git'];
   const matchedSkills = skillsList.filter(skill => lowercaseText.includes(skill.toLowerCase()));
 
   const cleanDescription = text
@@ -231,7 +357,7 @@ function runScraperSimulation(text, url = '', extraMeta = {}) {
     company,
     description: cleanDescription.length > 50 ? cleanDescription : `Job vacancy position for ${title} at ${company}. Skills required: ${matchedSkills.join(', ') || 'Software Engineering'}.`,
     skills_required: matchedSkills.length > 0 ? matchedSkills : ['React', 'Node.js', 'PostgreSQL', 'Python'],
-    location: lowercaseText.includes('remote') ? 'Remote' : 'Hybrid / On-site',
+    location,
     salary: 'Competitive'
   });
 }
@@ -247,6 +373,7 @@ export async function scrapeJobUrl(url) {
 
   let htmlText = '';
   let extraMeta = {};
+  let jsonLdMeta = null;
 
   if (scraper.constructor.name !== 'MockPortalScraper') {
     try {
@@ -259,17 +386,39 @@ export async function scrapeJobUrl(url) {
       
       if (response.ok) {
         htmlText = await response.text();
+        jsonLdMeta = extractJsonLdMetadata(htmlText);
       }
     } catch (err) {
       console.warn(`Standard page fetch notice: ${err.message}. Trying Playwright render.`);
     }
 
-    if (!htmlText || htmlText.includes('Cookies Disabled') || htmlText.includes('JavaScript!') || htmlText.length < 500) {
-      console.log('Detected JS/Cookie protected page. Using Playwright browser scraper...');
+    const isSPA = url.includes('careers.microsoft.com') ||
+                  url.includes('workday.com') ||
+                  url.includes('myworkdayjobs.com') ||
+                  url.includes('ashbyhq.com') ||
+                  url.includes('eightfold.ai') ||
+                  url.includes('phenom') ||
+                  url.includes('linkedin.com') ||
+                  htmlText.includes('&#34;\\5c') ||
+                  htmlText.includes('primary-color-') ||
+                  htmlText.includes('Cookies Disabled') ||
+                  htmlText.includes('JavaScript!') ||
+                  htmlText.length < 500;
+
+    if (isSPA || !htmlText) {
+      console.log('Detected JS/SPA/Cookie protected page. Using Playwright browser scraper...');
       const pwResult = await fetchPageWithPlaywright(url);
       if (pwResult) {
         htmlText = pwResult.content;
-        extraMeta = { title: pwResult.title, company: pwResult.company };
+        extraMeta = { title: pwResult.title, company: pwResult.company, location: pwResult.location };
+        if (pwResult.ldData) {
+          jsonLdMeta = {
+            title: pwResult.ldData.title,
+            company: pwResult.ldData.hiringOrganization?.name || pwResult.company,
+            description: decodeHTMLEntities(pwResult.ldData.description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+            location: pwResult.location || 'On-site / Hybrid'
+          };
+        }
         if (pwResult.bodyText && pwResult.bodyText.length > 200) {
           htmlText = `<title>${pwResult.title}</title>\n${pwResult.bodyText}`;
         }
@@ -296,12 +445,39 @@ export async function scrapeJobUrl(url) {
     const parsed = JSON.parse(sanitized);
 
     const meta = parseMetadataFromTitleAndUrl(cleanText, url, extraMeta);
-    if (!parsed.title || parsed.title === 'Software Engineer' || parsed.title === 'Register') parsed.title = meta.title;
-    if (!parsed.company || parsed.company === 'Innovate TechCorp' || parsed.company === 'Tech Corporation') parsed.company = meta.company;
+
+    if (jsonLdMeta) {
+      if (jsonLdMeta.title && jsonLdMeta.title !== 'Global' && jsonLdMeta.title !== 'Careers') parsed.title = jsonLdMeta.title;
+      if (jsonLdMeta.company) parsed.company = jsonLdMeta.company;
+      if (jsonLdMeta.location) parsed.location = jsonLdMeta.location;
+      if (jsonLdMeta.description && jsonLdMeta.description.length > 100) parsed.description = jsonLdMeta.description;
+    }
+
+    const invalidTitles = ['Global', 'Careers', 'Register', 'Apply', 'Overview', 'Single Position', 'View All Jobs'];
+    if (!parsed.title || invalidTitles.some(t => parsed.title.toLowerCase() === t.toLowerCase()) || (parsed.title === 'Software Engineer' && meta.title && meta.title !== 'Software Engineer')) {
+      parsed.title = (jsonLdMeta && jsonLdMeta.title) ? jsonLdMeta.title : (meta.title || 'Software Engineer');
+    }
+
+    const invalidCompanies = ['Innovate TechCorp', 'Tech Corporation', 'Recruiting Company', 'Company Name'];
+    if (!parsed.company || invalidCompanies.some(c => parsed.company.toLowerCase() === c.toLowerCase()) || parsed.company.includes('benefits')) {
+      parsed.company = (jsonLdMeta && jsonLdMeta.company) ? jsonLdMeta.company : meta.company;
+    }
+
+    if (!parsed.location || parsed.location === 'Remote') {
+      parsed.location = (jsonLdMeta && jsonLdMeta.location) ? jsonLdMeta.location : meta.location;
+    }
 
     return parsed;
   } catch (err) {
     console.error('Failed to parse scraped page content with AI:', err);
-    return JSON.parse(runScraperSimulation(cleanText, url, extraMeta));
+    const fallback = JSON.parse(runScraperSimulation(cleanText, url, extraMeta));
+    if (jsonLdMeta) {
+      if (jsonLdMeta.title) fallback.title = jsonLdMeta.title;
+      if (jsonLdMeta.company) fallback.company = jsonLdMeta.company;
+      if (jsonLdMeta.location) fallback.location = jsonLdMeta.location;
+      if (jsonLdMeta.description) fallback.description = jsonLdMeta.description;
+    }
+    return fallback;
   }
 }
+
