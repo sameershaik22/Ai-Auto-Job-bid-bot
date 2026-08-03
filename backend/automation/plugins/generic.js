@@ -167,6 +167,28 @@ export default class GenericPlugin extends BasePlugin {
     if (combined.includes('experience') || combined.includes('year')) return exp;
     if (combined.includes('hear') || combined.includes('source') || combined.includes('referral')) return 'Online Job Board';
 
+    // 9. Equal Employment Opportunity (EEO) & Diversity Voluntary Self-ID Questions
+    if (combined.includes('gender') || combined.includes('sex')) {
+      return 'Decline to self-identify';
+    }
+    if (combined.includes('veteran') || combined.includes('military')) {
+      return 'I am not a protected veteran';
+    }
+    if (combined.includes('disability') || combined.includes('handicap')) {
+      return 'No, I do not have a disability';
+    }
+    if (combined.includes('race') || combined.includes('ethnicity')) {
+      return 'Decline to self-identify';
+    }
+
+    // 10. Postal / Zip Code & Relocation
+    if (combined.includes('zip') || combined.includes('postal') || combined.includes('postcode')) {
+      return '10001';
+    }
+    if (combined.includes('relocat') || combined.includes('move')) {
+      return 'Yes';
+    }
+
     return '';
   }
 
@@ -226,7 +248,7 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         const text = result.response.text().trim().replace(/```json|```/g, '');
         aiAnswers = JSON.parse(text);
       } catch (err) {
-        await this.logger.warning(`AI form-fill Gemini fallback: ${err.message || 'Rate Limit'}. Using intelligent heuristic parser.`);
+        if (this.logger) await this.logger.warning(`AI form-fill Gemini fallback: ${err.message || 'Rate Limit'}. Using intelligent heuristic parser.`);
       }
     }
 
@@ -306,11 +328,17 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
   }
 
   async run(appData, resumePath) {
+    const appId = appData.id || 'app';
     try {
       await this.logger.info(`Generic Plugin: Navigating to ${appData.url || appData.job_url}`);
       const targetUrl = appData.url || appData.job_url;
       await this.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await this.page.waitForTimeout(3000);
+      await this.page.waitForTimeout(2500);
+
+      await this.captureStageEvidence('01_loaded', appId);
+      await this.detectAndHandleCaptcha();
+
+      const validation = await this.validateFormState(appData, resumePath);
 
       const applySelectors = [
         'a[href*="apply"]', 'button:has-text("Apply")', 'a:has-text("Apply Now")',
@@ -343,6 +371,8 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         } catch {}
       }
 
+      await this.captureStageEvidence('02_resume_uploaded', appId);
+
       await this.logger.info('Extracting form fields & dropdown options...');
       const formFields = await this.extractFormFields();
       await this.logger.info(`Detected ${formFields.length} form fields. Matching candidate profile & AI answers...`);
@@ -365,9 +395,13 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
 
         if (answer) {
           await this.fillField(field, answer);
-          await this.page.waitForTimeout(200);
+          await this.page.waitForTimeout(180);
         }
       }
+
+      await this.captureStageEvidence('03_fields_answered', appId);
+      await this.captureStageEvidence('04_pre_submit', appId);
+      await this.detectAndHandleCaptcha();
 
       await this.logger.info('Looking for submit button...');
       const submitSelectors = [
@@ -425,9 +459,16 @@ Return ONLY a valid JSON object mapping field numbers to string answers: { "1": 
         } catch {}
       }
 
-      await this.logger.success('Application form filled & submitted successfully via Generic Plugin.');
-      return { success: true, message: 'Application submitted.' };
+      await this.captureStageEvidence('05_confirmation', appId);
+      const confirmation = await this.extractSubmissionConfirmation();
 
+      await this.logger.success(`Generic Plugin completed submission. Tracking ID: ${confirmation.trackingId || 'N/A'}`);
+      return { 
+        success: true, 
+        message: 'Application submitted successfully.', 
+        trackingId: confirmation.trackingId, 
+        confirmationUrl: confirmation.confirmationUrl 
+      };
     } catch (error) {
       await this.logger.error('Generic Plugin error:', error.message);
       return { success: false, message: error.message };

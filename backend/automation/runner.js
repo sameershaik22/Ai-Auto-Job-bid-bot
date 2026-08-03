@@ -101,53 +101,79 @@ export async function runAutomation(applicationId, io) {
       fs.writeFileSync(resumeFilePath, app.tailored_resume_text || app.resume_text || 'Resume Content');
     }
 
-    await logger.info(`Launching browser for ${app.candidate_name} → ${app.job_title} at ${app.company}`);
-
     const isHeadless = process.env.HEADLESS === 'true';
-    browser = await chromium.launch({
-      headless: isHeadless,
-      args: ['--disable-blink-features=AutomationControlled', '--window-size=1280,800']
-    });
+    const maxRetries = 3;
+    let result = null;
 
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      retryCount = attempt - 1;
+      try {
+        if (browser) await browser.close().catch(() => {});
+        browser = await chromium.launch({
+          headless: isHeadless,
+          args: [
+            '--disable-blink-features=AutomationControlled',
+            '--no-sandbox',
+            '--disable-infobars',
+            '--window-size=1280,800'
+          ]
+        });
 
-    page = await context.newPage();
+        const context = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        });
 
-    const jobUrl = app.job_url || '';
-    const detectedATS = detectATSFromUrl(jobUrl) || app.ats_platform || app.website || 'generic';
+        page = await context.newPage();
+        await page.addInitScript(() => {
+          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        });
 
-    await logger.info(`ATS detected: ${detectedATS.toUpperCase()}`);
+        const jobUrl = app.job_url || '';
+        const detectedATS = detectATSFromUrl(jobUrl) || app.ats_platform || app.website || 'generic';
 
-    let pluginInstance;
-    switch (detectedATS) {
-      case 'lever':
-        pluginInstance = new LeverPlugin(page, logger, {});
-        break;
-      case 'greenhouse':
-        pluginInstance = new GreenhousePlugin(page, logger, {});
-        break;
-      case 'mock_portal':
-        pluginInstance = new MockPortalPlugin(page, logger, {});
-        break;
-      default:
-        pluginInstance = new GenericPlugin(page, logger, { gemini: geminiClient });
-        break;
+        if (attempt === 1) {
+          await logger.info(`ATS detected: ${detectedATS.toUpperCase()}`);
+        } else {
+          await logger.warning(`Retry Attempt ${attempt}/${maxRetries} for ${app.candidate_name}...`);
+        }
+
+        let pluginInstance;
+        switch (detectedATS) {
+          case 'lever':
+            pluginInstance = new LeverPlugin(page, logger, {});
+            break;
+          case 'greenhouse':
+            pluginInstance = new GreenhousePlugin(page, logger, {});
+            break;
+          case 'mock_portal':
+            pluginInstance = new MockPortalPlugin(page, logger, {});
+            break;
+          default:
+            pluginInstance = new GenericPlugin(page, logger, { gemini: geminiClient });
+            break;
+        }
+
+        const appWithUrl = { ...app, url: jobUrl };
+        result = await pluginInstance.run(appWithUrl, resumeFilePath);
+
+        if (result && result.success) break;
+      } catch (err) {
+        if (attempt === maxRetries) throw err;
+        await logger.warning(`Attempt ${attempt} notice: ${err.message}. Retrying...`);
+        await new Promise(r => setTimeout(r, 2000));
+      }
     }
 
-    const appWithUrl = { ...app, url: jobUrl };
-    const result = await pluginInstance.run(appWithUrl, resumeFilePath);
-
     const screenshotPath = path.join(screenshotsDir, `final_${applicationId}.png`);
-    await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {});
+    if (page) await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {});
     await logger.screenshot('final_state', `/screenshots/final_${applicationId}.png`);
 
     if (result && result.success) {
+      const responseMsg = result.trackingId ? `Submitted (Tracking ID: ${result.trackingId})` : (result.message || 'Submitted');
       await query(
         "UPDATE applications SET status='success', submitted_at=$1, response=$2 WHERE id=$3",
-        [new Date().toISOString(), result.message || 'Submitted', applicationId]
+        [new Date().toISOString(), responseMsg, applicationId]
       );
       await query('UPDATE jobs SET status=$1 WHERE id=$2', ['applied', app.job_id]);
       await logger.success(`Application submitted for ${app.candidate_name} → ${app.job_title}`);
