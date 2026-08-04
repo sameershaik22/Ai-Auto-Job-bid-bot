@@ -73,11 +73,11 @@ export async function runAutomation(applicationId, io) {
   };
 
   const logger = {
-    info:       (msg)         => createLog('STEP_UPDATE',  msg,                       'info'),
-    success:    (msg)         => createLog('STEP_SUCCESS', msg,                       'success'),
-    warning:    (msg)         => createLog('STEP_WARNING', msg,                       'warning'),
-    error:      (msg, detail) => createLog('STEP_ERROR',   `${msg} ${detail||''}`.trim(), 'error'),
-    screenshot: (name, fp)    => createLog('SCREENSHOT',   `Screenshot: ${name}`,     'info', fp),
+    info: (msg) => createLog('STEP_UPDATE', msg, 'info'),
+    success: (msg) => createLog('STEP_SUCCESS', msg, 'success'),
+    warning: (msg) => createLog('STEP_WARNING', msg, 'warning'),
+    error: (msg, detail) => createLog('STEP_ERROR', `${msg} ${detail || ''}`.trim(), 'error'),
+    screenshot: (name, fp) => createLog('SCREENSHOT', `Screenshot: ${name}`, 'info', fp),
   };
 
   try {
@@ -101,14 +101,15 @@ export async function runAutomation(applicationId, io) {
       fs.writeFileSync(resumeFilePath, app.tailored_resume_text || app.resume_text || 'Resume Content');
     }
 
-    const isHeadless = process.env.HEADLESS === 'true';
+    // HEADLESS_MODE=false → browser window is visible so you can watch it apply
+    const isHeadless = process.env.HEADLESS_MODE === 'true';
     const maxRetries = 3;
     let result = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       retryCount = attempt - 1;
       try {
-        if (browser) await browser.close().catch(() => {});
+        if (browser) await browser.close().catch(() => { });
         browser = await chromium.launch({
           headless: isHeadless,
           args: [
@@ -128,6 +129,10 @@ export async function runAutomation(applicationId, io) {
         await page.addInitScript(() => {
           Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         });
+
+        // Bring browser window to front so you can watch it apply
+        await page.bringToFront().catch(() => {});
+
 
         const jobUrl = app.job_url || '';
         const detectedATS = detectATSFromUrl(jobUrl) || app.ats_platform || app.website || 'generic';
@@ -166,7 +171,7 @@ export async function runAutomation(applicationId, io) {
     }
 
     const screenshotPath = path.join(screenshotsDir, `final_${applicationId}.png`);
-    if (page) await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {});
+    if (page) await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => { });
     await logger.screenshot('final_state', `/screenshots/final_${applicationId}.png`);
 
     if (result && result.success) {
