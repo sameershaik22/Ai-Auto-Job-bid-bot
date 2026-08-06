@@ -294,12 +294,13 @@ export class QuestionService {
       return desc;
     }).join('\n');
 
-    const candName  = candidate.candidate_name || 'Candidate';
-    const company   = candidate.company   || 'the company';
-    const jobTitle  = candidate.job_title || 'Software Engineer';
-    const skills    = candidate.skills    || 'React, Node.js, TypeScript, PostgreSQL';
-    const expYears  = candidate.years_of_experience || 5;
-    const summary   = candidate.summary   || `Experienced ${jobTitle} with ${expYears} years of experience in ${skills}.`;
+    const candName   = candidate.candidate_name || 'Candidate';
+    const company    = candidate.company   || 'the company';
+    const jobTitle   = candidate.job_title || 'Software Engineer';
+    const skills     = candidate.skills    || 'React, Node.js, TypeScript, PostgreSQL';
+    const expYears   = candidate.years_of_experience || 5;
+    const summary    = candidate.summary   || `Experienced ${jobTitle} with ${expYears} years of experience in ${skills}.`;
+    const resumeText = candidate.tailored_resume_text || candidate.resume_text || 'No resume text provided.';
 
     const prompt = `You are an expert career agent completing a job application for ${candName}.
 
@@ -313,18 +314,23 @@ Candidate Profile:
 - Location: ${candidate.location || 'New York, NY'}
 - Summary: ${summary}
 
-The following fields require a professional, free-text answer. Answer EVERY field:
+--- FULL RESUME ---
+${resumeText}
+-------------------
+
+The following fields from the job application require an answer. Answer EVERY field:
 ${fieldDescriptions}
 
-Rules:
-- "Why do you want to work here?" or "What excites you?" → 2-3 enthusiastic, specific sentences about ${company}.
-- "Cover letter" / "Tell us about yourself" / "Note" → 3-sentence professional introduction.
-- "Describe a challenge" → Brief STAR-format answer (2-3 sentences).
-- For dropdowns (options provided) → return the EXACT option text that best matches.
-- Keep all answers concise (2-4 sentences max), professional, and personalized to ${company}.
-- Do NOT fabricate specific project names or metrics.
+Instructions for answering:
+1. Search the Candidate Profile and FULL RESUME for the exact factual answer.
+2. If the answer exists in the resume, extract and format it appropriately.
+3. If the answer does NOT explicitly exist in the resume (e.g., "What is your biggest weakness?", "Describe a challenging project", "Why do you want to work here?"), use your best professional judgment to GENERATE a highly competent, positive response that aligns with a senior developer profile.
+4. For dropdowns (options provided) → return the EXACT option text that best matches. If none perfectly match, pick the closest logical option.
+5. For checkboxes/multi-selects → return comma-separated options.
+6. For "Cover letter" or "Tell us about yourself" → write a 3-sentence professional introduction tailored to ${company}.
+7. Keep free-text answers concise (2-4 sentences max), professional, and persuasive. Do NOT fabricate specific company names or fake project metrics that aren't in the resume.
 
-Return ONLY a valid JSON object with string values: { "1": "answer1", "2": "answer2", ... }`;
+Return ONLY a valid JSON object with string values where the key is the field number: { "1": "answer1", "2": "answer2", ... }`;
 
     try {
       const model  = this.gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });

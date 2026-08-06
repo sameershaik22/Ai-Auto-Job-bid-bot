@@ -631,6 +631,25 @@ export default class GenericPlugin extends BasePlugin {
         await this.captureStageEvidence(`page_${pageNumber}_filled`, appId);
         await this.detectAndHandleCaptcha();
 
+        // ── STRICT CROSS-CHECK: Ensure all fields are answered before submitting ──
+        let unansweredCount = 0;
+        for (let i = 0; i < formFields.length; i++) {
+          const field = formFields[i];
+          if (field.type === 'file' || field.type === 'hidden' || field.type === 'submit' || field.tagName === 'button') continue;
+          if (!answers[String(i + 1)]) {
+            unansweredCount++;
+            await this.logger.warning(`⚠️ Unanswered field detected: ${field.label || field.name || field.placeholder}`);
+          }
+        }
+
+        if (unansweredCount > 0) {
+          await this.logger.error(`Automation stopped: ${unansweredCount} field(s) were left unanswered. Preventing incomplete submission.`);
+          return {
+            success: false,
+            message: `Skipped ${unansweredCount} question(s). Aborted to prevent submitting an incomplete application.`,
+          };
+        }
+
         // ── Submit? ──────────────────────────────────────────────────────────
         const submitBtn = await this._findSubmitButton();
         if (submitBtn) {
