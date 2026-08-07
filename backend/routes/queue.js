@@ -1,6 +1,6 @@
 import express from 'express';
 import { query, queryOne } from '../database/db.js';
-import { processQueue, stopQueue, getActiveQueueRunId } from '../automation/queue-manager.js';
+import { jobQueue, stopQueue, getActiveQueueRunId } from '../automation/queue-manager.js';
 import { getIO } from '../socket.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -32,18 +32,27 @@ router.post('/start', async (req, res) => {
       [runId, pairs.length, 'running']
     );
 
+    const io = getIO();
     for (let i = 0; i < pairs.length; i++) {
       const itemId = `qi_${uuidv4().replace(/-/g, '').substring(0, 16)}`;
       await query(
         'INSERT INTO queue_items (id, queue_run_id, candidate_id, job_id, position) VALUES ($1,$2,$3,$4,$5)',
         [itemId, runId, pairs[i].candidateId, pairs[i].jobId, i]
       );
+      
+      // Push job to BullMQ
+      await jobQueue.add('apply', {
+        queueRunId: runId,
+        itemId: itemId,
+        candidateId: pairs[i].candidateId,
+        jobId: pairs[i].jobId,
+        position: i
+      });
     }
 
-    const io = getIO();
-    processQueue(runId, io).catch(err => {
-      console.error('Queue manager error:', err);
-    });
+    if (io) {
+      io.emit('queue_progress', { queueRunId: runId, total: pairs.length, completed: 0, failed: 0, status: 'running' });
+    }
 
     res.status(202).json({
       success: true,
