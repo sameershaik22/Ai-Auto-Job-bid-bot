@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS applications (
     matched_skills TEXT,
     missing_skills TEXT,
     match_recommendations TEXT,
+    interview_prep TEXT,
     website VARCHAR(100) NOT NULL DEFAULT 'generic',
     submitted_at TIMESTAMP,
     response TEXT,

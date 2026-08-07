@@ -111,8 +111,34 @@ router.post('/:id/run', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await query('DELETE FROM applications WHERE id = ?', [req.params.id]);
+    await query('DELETE FROM applications WHERE id = $1', [req.params.id]);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/interview-prep', async (req, res) => {
+  try {
+    const appRecord = await queryOne('SELECT * FROM applications WHERE id = $1', [req.params.id]);
+    if (!appRecord) return res.status(404).json({ error: 'Application not found' });
+
+    if (appRecord.interview_prep) {
+      return res.json({ success: true, interview_prep: JSON.parse(appRecord.interview_prep) });
+    }
+
+    const job = await queryOne('SELECT * FROM jobs WHERE id = $1', [appRecord.job_id]);
+    const resume = await queryOne('SELECT * FROM resumes WHERE id = $1', [appRecord.resume_id]);
+    if (!job || !resume) return res.status(404).json({ error: 'Job or Resume not found' });
+
+    const { generateInterviewPrep } = await import('../services/aiService.js');
+    const resumeText = appRecord.tailored_resume_text || resume.resume_text || '';
+    
+    const prepData = await generateInterviewPrep(job.title, job.company, job.description, resumeText);
+    
+    await query('UPDATE applications SET interview_prep = $1 WHERE id = $2', [JSON.stringify(prepData), req.params.id]);
+
+    res.json({ success: true, interview_prep: prepData });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

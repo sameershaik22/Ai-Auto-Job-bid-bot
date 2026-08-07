@@ -371,3 +371,38 @@ Do not write markdown block ticks. JSON only.
     };
   }
 }
+
+export async function generateInterviewPrep(jobTitle, company, jobDescription, resumeText) {
+  const prompt = `Based on the following candidate resume and target job description, generate a highly targeted Interview Prep Guide.
+Predict the top 5 questions the interviewer is likely to ask (a mix of technical and behavioral) and provide a suggested answer strategy for each, explicitly weaving in the candidate's actual experience from their resume.
+
+Candidate Resume:
+${resumeText}
+
+Target Job: ${jobTitle} at ${company}
+Job Description:
+${jobDescription}
+`;
+
+  const systemPrompt = `You are a FAANG-level executive recruiter preparing a candidate for a critical interview.
+Return ONLY a valid JSON array of objects, where each object represents a predicted question.
+Schema:
+[
+  {
+    "question": "The predicted interview question",
+    "type": "Behavioral" | "Technical" | "Cultural",
+    "why_they_ask_this": "Brief explanation of what the interviewer is actually testing",
+    "suggested_answer_strategy": "How the candidate should answer, referencing their specific resume experience"
+  }
+]
+Do not write markdown block ticks. JSON only.`;
+
+  try {
+    const raw = await callLLM(systemPrompt, prompt, true);
+    const sanitized = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(sanitized);
+  } catch (err) {
+    console.error('AI Interview Prep Generation error:', err);
+    return [];
+  }
+}

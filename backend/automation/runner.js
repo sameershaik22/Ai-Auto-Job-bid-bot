@@ -98,7 +98,10 @@ export async function runAutomation(applicationId, io) {
     }
     if (!resumeFilePath) {
       resumeFilePath = path.join(uploadsDir, `resume_${safeName}_${applicationId}.pdf`);
-      fs.writeFileSync(resumeFilePath, app.tailored_resume_text || app.resume_text || 'Resume Content');
+      
+      const { generateResumePDF } = await import('../services/pdfService.js');
+      const text = app.tailored_resume_text || app.resume_text || 'Resume Content';
+      await generateResumePDF(text, resumeFilePath);
     }
 
     // HEADLESS_MODE=false → browser window is visible so you can watch it apply

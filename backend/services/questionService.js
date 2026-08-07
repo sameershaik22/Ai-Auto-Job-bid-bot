@@ -301,6 +301,14 @@ export class QuestionService {
     const expYears   = candidate.years_of_experience || 5;
     const summary    = candidate.summary   || `Experienced ${jobTitle} with ${expYears} years of experience in ${skills}.`;
     const resumeText = candidate.tailored_resume_text || candidate.resume_text || 'No resume text provided.';
+    
+    let companyContext = '';
+    try {
+      const { getCompanyContext } = await import('./researchService.js');
+      companyContext = await getCompanyContext(company);
+    } catch (e) {
+      console.warn("Could not fetch company context:", e.message);
+    }
 
     const prompt = `You are an expert career agent completing a job application for ${candName}.
 
@@ -317,6 +325,8 @@ Candidate Profile:
 --- FULL RESUME ---
 ${resumeText}
 -------------------
+
+${companyContext ? `--- COMPANY RESEARCH / NEWS ---\nUse this context to write highly tailored and impressive answers about why the candidate wants to work at ${company}:\n${companyContext}\n-------------------` : ''}
 
 The following fields from the job application require an answer. Answer EVERY field:
 ${fieldDescriptions}

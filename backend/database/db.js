@@ -130,6 +130,7 @@ async function runMigrations() {
     { name: 'matched_skills', type: 'TEXT' },
     { name: 'missing_skills', type: 'TEXT' },
     { name: 'match_recommendations', type: 'TEXT' },
+    { name: 'interview_prep', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMP' }
   ];
 
