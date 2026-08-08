@@ -11,9 +11,15 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
+const rawRedisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const isPlaceholder = rawRedisUrl.includes('host:port');
 const connection = {
-  url: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
+  url: isPlaceholder ? 'redis://127.0.0.1:6379' : rawRedisUrl,
 };
+
+if (isPlaceholder) {
+  console.warn('\n[WARNING] You are using the dummy REDIS_URL placeholder. Defaulting to localhost:6379.');
+}
 
 export const jobQueue = new Queue('applicationQueue', { connection });
 
