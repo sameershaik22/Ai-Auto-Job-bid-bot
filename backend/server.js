@@ -32,6 +32,7 @@ import { runAutomation } from './automation/runner.js';
 import { scrapeJobUrl } from './services/scraperService.js';
 import { setIO } from './socket.js';
 import authRouter from './routes/auth.js';
+import { requireAuth } from './middleware/auth.js';
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -92,13 +93,13 @@ app.use('/screenshots', express.static(screenshotsDir));
 app.use('/uploads', express.static(uploadsDir));
 
 app.use('/api/auth', authRouter);
-app.use('/api/resumes', resumesRouter);
-app.use('/api/candidates', candidatesRouter);
-app.use('/api/jobs', jobsRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/applications', applicationsRouter);
-app.use('/api/credentials', credentialsRouter);
-app.use('/api/queue', queueRouter);
+app.use('/api/resumes', requireAuth, resumesRouter);
+app.use('/api/candidates', requireAuth, candidatesRouter);
+app.use('/api/jobs', requireAuth, jobsRouter);
+app.use('/api/ai', requireAuth, aiRouter);
+app.use('/api/applications', requireAuth, applicationsRouter);
+app.use('/api/credentials', requireAuth, credentialsRouter);
+app.use('/api/queue', requireAuth, queueRouter);
 
 io.on('connection', (socket) => {
   console.log(`Socket client connected: ${socket.id}`);

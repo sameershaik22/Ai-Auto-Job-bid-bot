@@ -60,7 +60,7 @@ const handleFileUploadMiddleware = (req, res, next) => {
 
 router.get('/', async (req, res) => {
   try {
-    const resumes = await query('SELECT * FROM resumes ORDER BY created_at DESC');
+    const resumes = await query('SELECT * FROM resumes WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
     const parsedResumes = resumes.map(r => ({
       ...r,
       skills: r.skills ? r.skills.split(',') : [],
@@ -292,8 +292,8 @@ router.post('/', handleFileUploadMiddleware, async (req, res) => {
     const prefixToCheck = resume_text.substring(0, 100);
     const existingDuplicate = await queryOne(`
       SELECT id, name, resume_pdf, resume_docx FROM resumes 
-      WHERE candidate_name = ? AND (resume_text LIKE ? OR name = ?)
-    `, [candidate_name, `%${prefixToCheck}%`, name]);
+      WHERE user_id = ? AND candidate_name = ? AND (resume_text LIKE ? OR name = ?)
+    `, [req.user.id, candidate_name, `%${prefixToCheck}%`, name]);
 
     if (existingDuplicate) {
       if (!overwrite) {
@@ -313,7 +313,7 @@ router.post('/', handleFileUploadMiddleware, async (req, res) => {
           const oldPath = path.join(__dirname, '../public', existingDuplicate.resume_docx);
           if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
         }
-        await query('DELETE FROM resumes WHERE id = ?', [existingDuplicate.id]);
+        await query('DELETE FROM resumes WHERE id = ? AND user_id = ? AND user_id = ?', [existingDuplicate.id, req.user.id]);
       }
     }
 
@@ -326,12 +326,12 @@ router.post('/', handleFileUploadMiddleware, async (req, res) => {
 
     await query(`
       INSERT INTO resumes (
-        id, name, candidate_name, skills, experience, summary, education, 
+        id, user_id, user_id, name, candidate_name, skills, experience, summary, education, 
         resume_text, years_of_experience, categories, technologies, resume_pdf, resume_docx, status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      id, name, candidate_name, skillsStr, expStr, extracted.summary || '', eduStr, 
+      id, req.user.id, name, candidate_name, skillsStr, expStr, extracted.summary || '', eduStr, 
       resume_text, extracted.years_of_experience || 6, catStr, techStr, resume_pdf, resume_docx, 'active'
     ]);
 
@@ -381,10 +381,10 @@ router.put('/:id', async (req, res) => {
       WHERE id = ?
     `, [
       name, candidate_name, skillsStr, expStr, summary, 
-      eduStr, resume_text, parseInt(years_of_experience) || 0, catStr, techStr, new Date().toISOString(), req.params.id
+      eduStr, resume_text, parseInt(years_of_experience) || 0, catStr, techStr, new Date().toISOString(), req.params.id, req.user.id
     ]);
 
-    const updated = await queryOne('SELECT name, candidate_name FROM resumes WHERE id = ?', [req.params.id]);
+    const updated = await queryOne('SELECT name, candidate_name FROM resumes WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     logActivity({
       action: 'resume_updated',
       message: `Resume "${updated?.name || req.params.id}" was edited`,
@@ -400,7 +400,7 @@ router.put('/:id', async (req, res) => {
 
 router.post('/:id/clone', async (req, res) => {
   try {
-    const src = await queryOne('SELECT * FROM resumes WHERE id = ?', [req.params.id]);
+    const src = await queryOne('SELECT * FROM resumes WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     if (!src) return res.status(404).json({ error: 'Source resume not found.' });
 
     const id = `res_${Date.now()}`;
@@ -411,9 +411,9 @@ router.post('/:id/clone', async (req, res) => {
         id, name, candidate_name, skills, experience, summary, education, 
         resume_text, years_of_experience, categories, technologies, resume_pdf, resume_docx, status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      id, clonedName, src.candidate_name, src.skills, src.experience, src.summary, src.education, 
+      id, req.user.id, clonedName, src.candidate_name, src.skills, src.experience, src.summary, src.education, 
       src.resume_text, src.years_of_experience, src.categories, src.technologies, src.resume_pdf, src.resume_docx, src.status
     ]);
 
@@ -432,11 +432,11 @@ router.post('/:id/clone', async (req, res) => {
 
 router.patch('/:id/archive', async (req, res) => {
   try {
-    const resume = await queryOne('SELECT status FROM resumes WHERE id = ?', [req.params.id]);
+    const resume = await queryOne('SELECT status FROM resumes WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     if (!resume) return res.status(404).json({ error: 'Resume not found.' });
 
     const nextStatus = resume.status === 'archived' ? 'active' : 'archived';
-    await query('UPDATE resumes SET status = ? WHERE id = ?', [nextStatus, req.params.id]);
+    await query('UPDATE resumes SET status = ? WHERE id = ? AND user_id = ?', [nextStatus, req.params.id, req.user.id]);
 
     res.json({ success: true, status: nextStatus });
   } catch (err) {
@@ -446,7 +446,7 @@ router.patch('/:id/archive', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const resume = await queryOne('SELECT resume_pdf, resume_docx FROM resumes WHERE id = ?', [req.params.id]);
+    const resume = await queryOne('SELECT resume_pdf, resume_docx FROM resumes WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     if (resume) {
       if (resume.resume_pdf) {
         const fullPath = path.join(__dirname, '../public', resume.resume_pdf);
@@ -459,7 +459,7 @@ router.delete('/:id', async (req, res) => {
     }
     
     const toDelete = await queryOne('SELECT name, candidate_name FROM resumes WHERE id = ?', [req.params.id]);
-    await query('DELETE FROM resumes WHERE id = ?', [req.params.id]);
+    await query('DELETE FROM resumes WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     logActivity({
       action: 'resume_deleted',
       message: `Resume "${toDelete?.name || req.params.id}" deleted from vault`,

@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS resumes (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     candidate_name VARCHAR(255) NOT NULL,
     email VARCHAR(255),
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS resumes (
 
 CREATE TABLE IF NOT EXISTS jobs (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     url TEXT UNIQUE NOT NULL,
     title VARCHAR(255) NOT NULL,
     company VARCHAR(255) NOT NULL,
@@ -64,6 +66,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE TABLE IF NOT EXISTS applications (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     resume_id VARCHAR(50) REFERENCES resumes(id) ON DELETE CASCADE,
     job_id VARCHAR(50) REFERENCES jobs(id) ON DELETE CASCADE,
     queue_item_id VARCHAR(50),
@@ -104,6 +107,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS activity_logs (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     action VARCHAR(100) NOT NULL,
     message TEXT NOT NULL,
     entity_type VARCHAR(50),
@@ -115,6 +119,7 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 
 CREATE TABLE IF NOT EXISTS notifications (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     type VARCHAR(50) DEFAULT 'info',
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
@@ -127,6 +132,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE TABLE IF NOT EXISTS queue_runs (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     total INT NOT NULL DEFAULT 0,
     completed INT DEFAULT 0,
     failed INT DEFAULT 0,
@@ -137,6 +143,7 @@ CREATE TABLE IF NOT EXISTS queue_runs (
 
 CREATE TABLE IF NOT EXISTS queue_items (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     queue_run_id VARCHAR(50) REFERENCES queue_runs(id) ON DELETE CASCADE,
     candidate_id VARCHAR(50) REFERENCES resumes(id) ON DELETE CASCADE,
     job_id VARCHAR(50) REFERENCES jobs(id) ON DELETE CASCADE,
@@ -151,6 +158,7 @@ CREATE TABLE IF NOT EXISTS queue_items (
 
 CREATE TABLE IF NOT EXISTS platform_credentials (
     id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
     platform VARCHAR(100) NOT NULL UNIQUE,
     email VARCHAR(255),
     password_enc TEXT,

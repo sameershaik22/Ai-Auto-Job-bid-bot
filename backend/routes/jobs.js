@@ -22,7 +22,7 @@ function detectATSPlatform(url) {
 
 router.get('/', async (req, res) => {
   try {
-    const jobs = await query('SELECT * FROM jobs ORDER BY created_at DESC');
+    const jobs = await query('SELECT * FROM jobs WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
     const parsedJobs = jobs.map(j => {
       let recData = { recommendations: [], confidence_reason: '', reasoning: '', ratings: {} };
       try { if (j.match_recommendations) recData = JSON.parse(j.match_recommendations); } catch (e) {}
@@ -65,13 +65,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters: url, title, company, description' });
     }
 
-    const existing = await queryOne('SELECT id FROM jobs WHERE url = ?', [url]);
+    const existing = await queryOne('SELECT id FROM jobs WHERE url = ? AND user_id = ?', [url, req.user.id]);
     if (existing) return res.status(409).json({ error: 'A job posting with this URL already exists.' });
 
     const id = `job_${Date.now()}`;
     const skillsStr = Array.isArray(skills_required) ? skills_required.join(',') : (skills_required || '');
 
-    const activeResumes = await query("SELECT id, name, resume_text FROM resumes WHERE status = 'active'");
+    const activeResumes = await query("SELECT id, name, resume_text FROM resumes WHERE status = 'active' AND user_id = ?", [req.user.id]);
     let bestScore = 0, bestResumeId = null, bestResumeName = null;
     let bestConfidence = 'Low', bestAtsScore = 0;
     let bestMatchedSkills = '[]', bestMissingSkills = '[]', bestRecommendations = '{}';
@@ -103,12 +103,12 @@ router.post('/', async (req, res) => {
 
     await query(`
       INSERT INTO jobs (
-        id, url, title, company, description, skills_required, location, salary,
+        id, user_id, req.user.id, url, title, company, description, skills_required, location, salary,
         ats_platform,
         match_score, recommended_resume_id, recommended_resume_name, match_confidence,
         matched_skills, missing_skills, match_recommendations, ats_score, status
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
     `, [
       id, url, title, company, description, skillsStr, location || 'Remote', salary || 'TBD',
       atsPlatform,
@@ -142,7 +142,7 @@ router.put('/:id', async (req, res) => {
     const { title, company, description, skills_required, location, salary } = req.body;
     const skillsStr = Array.isArray(skills_required) ? skills_required.join(',') : (skills_required || '');
 
-    const activeResumes = await query("SELECT id, name, resume_text FROM resumes WHERE status = 'active'");
+    const activeResumes = await query("SELECT id, name, resume_text FROM resumes WHERE status = 'active' AND user_id = ?", [req.user.id]);
     let bestScore = 0, bestResumeId = null, bestResumeName = null;
     let bestConfidence = 'Low', bestAtsScore = 0;
     let bestMatchedSkills = '[]', bestMissingSkills = '[]', bestRecommendations = '{}';
@@ -191,7 +191,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const toDelete = await queryOne('SELECT title, company FROM jobs WHERE id = ?', [req.params.id]);
-    await query('DELETE FROM jobs WHERE id = ?', [req.params.id]);
+    await query('DELETE FROM jobs WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     logActivity({
       action: 'job_deleted',
       message: `Job "${toDelete?.title || req.params.id}" removed from board`,

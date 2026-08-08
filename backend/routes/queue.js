@@ -28,16 +28,16 @@ router.post('/start', async (req, res) => {
     }
 
     await query(
-      'INSERT INTO queue_runs (id, total, status) VALUES ($1,$2,$3)',
-      [runId, pairs.length, 'running']
+      'INSERT INTO queue_runs (id, user_id, total, status) VALUES ($1,$2,$3,$4)',
+      [runId, req.user.id, pairs.length, 'running']
     );
 
     const io = getIO();
     for (let i = 0; i < pairs.length; i++) {
       const itemId = `qi_${uuidv4().replace(/-/g, '').substring(0, 16)}`;
       await query(
-        'INSERT INTO queue_items (id, queue_run_id, candidate_id, job_id, position) VALUES ($1,$2,$3,$4,$5)',
-        [itemId, runId, pairs[i].candidateId, pairs[i].jobId, i]
+        'INSERT INTO queue_items (id, user_id, queue_run_id, candidate_id, job_id, position) VALUES ($1,$2,$3,$4,$5,$6)',
+        [itemId, req.user.id, runId, pairs[i].candidateId, pairs[i].jobId, i]
       );
       
       // Push job to BullMQ
@@ -81,13 +81,13 @@ router.get('/status', async (req, res) => {
       return res.json({ active: false, queueRunId: null });
     }
 
-    const run = await queryOne('SELECT * FROM queue_runs WHERE id=$1', [activeId]);
+    const run = await queryOne('SELECT * FROM queue_runs WHERE id=$1 AND user_id=$2', [activeId, req.user.id]);
     const items = await query(`
       SELECT qi.*, r.candidate_name, j.title as job_title, j.company
       FROM queue_items qi
       JOIN resumes r ON qi.candidate_id = r.id
       JOIN jobs j ON qi.job_id = j.id
-      WHERE qi.queue_run_id = $1
+      WHERE qi.queue_run_id = $1 AND qi.user_id = $2 AND qi.user_id = $2
       ORDER BY qi.position ASC
     `, [activeId]);
 
@@ -99,7 +99,7 @@ router.get('/status', async (req, res) => {
 
 router.get('/history', async (req, res) => {
   try {
-    const runs = await query('SELECT * FROM queue_runs ORDER BY started_at DESC LIMIT 20');
+    const runs = await query('SELECT * FROM queue_runs WHERE user_id = $1 ORDER BY started_at DESC LIMIT 20', [req.user.id]);
     res.json(runs);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const apps = await query('SELECT * FROM applications ORDER BY created_at DESC');
+    const apps = await query('SELECT * FROM applications WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
     res.json(apps);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -23,9 +23,9 @@ router.post('/', async (req, res) => {
 
     const id = `app_${Date.now()}`;
     await query(`
-      INSERT INTO applications (id, resume_id, job_id, website, status)
-      VALUES (?, ?, ?, ?, ?)
-    `, [id, resume_id, job_id, website, 'pending']);
+      INSERT INTO applications (id, user_id, req.user.id, resume_id, job_id, website, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [id, req.user.id, resume_id, job_id, website, 'pending']);
     
     const resume = await queryOne('SELECT name, candidate_name FROM resumes WHERE id = ?', [resume_id]);
     const job = await queryOne('SELECT title, company FROM jobs WHERE id = ?', [job_id]);
@@ -59,10 +59,10 @@ router.post('/save', async (req, res) => {
     const id = `app_${Date.now()}`;
     await query(`
       INSERT INTO applications (
-        id, resume_id, job_id, website, status, 
+        id, user_id, resume_id, job_id, website, status, 
         tailored_resume_text, cover_letter, proposal, score, response
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id, resume_id, job_id, website || 'unknown', 'saved',
       tailored_resume_text || null, cover_letter || null, proposal || null, 
@@ -87,11 +87,11 @@ router.post('/save', async (req, res) => {
 
 router.post('/:id/run', async (req, res) => {
   try {
-    const appRecord = await queryOne('SELECT * FROM applications WHERE id = ?', [req.params.id]);
+    const appRecord = await queryOne('SELECT * FROM applications WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     if (!appRecord) return res.status(404).json({ error: 'Application not found' });
     if (appRecord.status === 'running') return res.status(400).json({ error: 'Already running' });
 
-    await query('UPDATE applications SET status = ? WHERE id = ?', ['running', req.params.id]);
+    await query('UPDATE applications SET status = ? WHERE id = ? AND user_id = ?', ['running', req.params.id, req.user.id]);
     
     logActivity({
       action: 'automation_started',
@@ -111,7 +111,7 @@ router.post('/:id/run', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await query('DELETE FROM applications WHERE id = $1', [req.params.id]);
+    await query('DELETE FROM applications WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -120,7 +120,7 @@ router.delete('/:id', async (req, res) => {
 
 router.get('/:id/interview-prep', async (req, res) => {
   try {
-    const appRecord = await queryOne('SELECT * FROM applications WHERE id = $1', [req.params.id]);
+    const appRecord = await queryOne('SELECT * FROM applications WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
     if (!appRecord) return res.status(404).json({ error: 'Application not found' });
 
     if (appRecord.interview_prep) {
@@ -136,7 +136,7 @@ router.get('/:id/interview-prep', async (req, res) => {
     
     const prepData = await generateInterviewPrep(job.title, job.company, job.description, resumeText);
     
-    await query('UPDATE applications SET interview_prep = $1 WHERE id = $2', [JSON.stringify(prepData), req.params.id]);
+    await query('UPDATE applications SET interview_prep = $1 WHERE id = $2 AND user_id = $3', [JSON.stringify(prepData), req.params.id, req.user.id]);
 
     res.json({ success: true, interview_prep: prepData });
   } catch (err) {

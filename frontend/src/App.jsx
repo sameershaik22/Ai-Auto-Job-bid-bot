@@ -72,6 +72,27 @@ export default function App() {
   });
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('auth_token') || null);
 
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      let [resource, config] = args;
+      if (!config) {
+        config = {};
+      }
+      if (!config.headers) {
+        config.headers = {};
+      }
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+      return originalFetch(resource, config);
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
   const handleAuth = (user, token) => {
     setAuthUser(user);
     setAuthToken(token);
