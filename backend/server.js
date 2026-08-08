@@ -674,9 +674,26 @@ app.get('/api/platforms', async (req, res) => {
 });
 
 import os from 'os';
+import { decrypt } from './routes/credentials.js';
+import { startImapListener } from './services/emailService.js';
 
 async function startServer() {
   await initializeDatabase();
+  
+  // Start IMAP listeners for all connected users
+  try {
+    const creds = await query("SELECT user_id, email, password_enc FROM platform_credentials WHERE platform = 'gmail'");
+    for (const cred of creds) {
+      const password = decrypt(cred.password_enc);
+      if (password) {
+        console.log(`[System] Starting IMAP listener for user: ${cred.user_id}`);
+        startImapListener(cred.user_id, { email: cred.email, password });
+      }
+    }
+  } catch (err) {
+    console.error('[System] Error starting IMAP listeners:', err.message);
+  }
+
   server.listen(PORT, () => {
     console.log(`===================================================`);
     console.log(`   AutoBid Bot Express Server running on Port ${PORT}`);

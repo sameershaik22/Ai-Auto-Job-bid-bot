@@ -174,3 +174,16 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 CREATE INDEX IF NOT EXISTS idx_queue_items_run ON queue_items(queue_run_id);
 CREATE INDEX IF NOT EXISTS idx_queue_items_status ON queue_items(status);
+
+CREATE TABLE IF NOT EXISTS interviews (
+    id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES users(id) ON DELETE CASCADE,
+    application_id VARCHAR(50) REFERENCES applications(id) ON DELETE CASCADE,
+    company VARCHAR(255) NOT NULL,
+    scheduled_time VARCHAR(255),
+    meeting_link TEXT,
+    email_subject TEXT,
+    email_body TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
